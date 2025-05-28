@@ -185,7 +185,6 @@ namespace FinalProj
             RoomId INTEGER,
             BlockId INTEGER,
             Role TEXT NOT NULL,
-            BlockUnderResponsibility TEXT NOT NULL,
             FOREIGN KEY (StudentId) REFERENCES Students(Id),
             FOREIGN KEY (RoomId) REFERENCES Rooms(Id),
             FOREIGN KEY (BlockId) REFERENCES Blocks(Id)
@@ -213,7 +212,7 @@ namespace FinalProj
         );";
 
             string studentSql = @"
-            CREATE TABLE IF NOT EXISTS Student (
+            CREATE TABLE IF NOT EXISTS Students (
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 FullName TEXT NOT NULL,
                 SocialNumber TEXT UNIQUE NOT NULL,
@@ -258,6 +257,8 @@ namespace FinalProj
                 cmd.CommandText = studentSql; cmd.ExecuteNonQuery();
                 cmd.CommandText = itemSql; cmd.ExecuteNonQuery();
                 cmd.CommandText = equipmentSql; cmd.ExecuteNonQuery();
+                cmd.CommandText = dormitoryBlockSupervisorSql; cmd.ExecuteNonQuery();
+                cmd.CommandText = dormitorySupervisorSql; cmd.ExecuteNonQuery();
             }
 
         }
@@ -296,51 +297,50 @@ namespace FinalProj
             _BlockId = blockid;
             _DormitoryId = dormitoryid;
         }
-        public static void AddStudent(DatabaseManager db, Student student)
+        public static void AddStudent(DatabaseManager db)
         {
-            var values = new Dictionary<string, object>
-        {
-            {"FullName", student._fullName},
-            {"SocialNumber", student._socialNumber},
-            {"PhoneNumber", student._phoneNumber},
-            {"Address", student._address},
-            {"StudentID", student._StudentID},
-            {"RoomId", student._RoomId},
-            {"BlockId", student._BlockId},
-            {"DormitoryId" , student._DormitoryId }
-        };
-            db.InsertRecord("students", values);
+            Write("نام کامل: ");
+            string FullName = ReadLine();
+            Write("شماره ملی: ");
+            string SocialNumber = ReadLine();
+            Write("شماره تماس: ");
+            string PhoneNumber = ReadLine();
+            Write("آدرس: ");
+            string Address = ReadLine();
+            Write("شماره دانشجویی: ");
+            string StudentId = ReadLine();
+            Dictionary<string,object> info = new Dictionary<string,object>
+            {
+                {"FullName",FullName},
+                {"SocialNumber",SocialNumber},
+                {"StudentId",StudentId},
+                {"PhoneNumber",PhoneNumber},
+                {"Address",Address},
+            };
+            RegisterDormitoryStudent(db,info);
         }
         public static void RemoveStudent(DatabaseManager db, string socialNumber) 
         {
             if (db.DoesSocialNumberExist("students", socialNumber))
+            {
                 db.DeleteRecord("students", "SocialNumber", socialNumber);
+                WriteLine("دانشجو با موفقیت حذف شد.");
+            }
             else
-                throw new Exception();
+                WriteLine("دانشجویی با این شماره ملی یافت نشد.");
         }
-        public static void UpdateStudentInfoWithCurrentData(DatabaseManager db, string studentSocialNumber)
+        public static void UpdateStudentInfoWithCurrentData(DatabaseManager db, string SocialNumber)
         {
-            var studentRecords = db.GetRecordsByField("students", "SocialNumber", studentSocialNumber);
-            if (studentRecords.Count == 0) return;
+            var studentRecord = db.GetRecordsByField("students", "SocialNumber", SocialNumber);
+            if (studentRecord == null || studentRecord.Count == 0)
+            {
+                WriteLine("دانشجویی با این شماره ملی یافت نشد.");
+                return;
+            }
 
-            var student = studentRecords[0];
-            int currentRoomId = Convert.ToInt32(student["RoomId"]);
-            int currentBlockId = Convert.ToInt32(student["BlockId"]);
+            var student = studentRecord[0];
             string currentPhoneNumber = student["PhoneNumber"]?.ToString() ?? "";
             string currentAddress = student["Address"]?.ToString() ?? "";
-
-            var allBlocks = db.GetAllRecords("Blocks");
-            foreach (var b in allBlocks)
-                WriteLine($"Id: {b["Id"]}, Name: {b["Name"]}");
-            string blockInput = ReadLine();
-            int newBlockId = string.IsNullOrEmpty(blockInput) ? currentBlockId : int.Parse(blockInput);
-
-            var allRooms = db.GetAllRecords("Rooms");
-            foreach (var r in allRooms)
-                WriteLine($"Id: {r["Id"]}, Number: {r["RoomNumber"]}, BlockId: {r["BlockId"]}");
-            string roomInput = ReadLine();
-            int newRoomId = string.IsNullOrEmpty(roomInput) ? currentRoomId : int.Parse(roomInput);
-
             string newPhone = ReadLine();
             if (string.IsNullOrEmpty(newPhone)) newPhone = currentPhoneNumber;
             string newAddress = ReadLine();
@@ -348,22 +348,25 @@ namespace FinalProj
 
             var updateFields = new Dictionary<string, object>
         {
-            { "RoomId", newRoomId },
-            { "BlockId", newBlockId },
             { "PhoneNumber", newPhone },
             { "Address", newAddress }
         };
-            db.UpdateRecord("students", updateFields, "SocialNumber", studentSocialNumber);
+            db.UpdateRecord("students", updateFields, "SocialNumber",SocialNumber);
+            WriteLine("\nتغییرات با موفقیت ذخیره شد.");
         }
         public static void SerachStudent(DatabaseManager db, string socialNumber, string phoneNumber = null)
         {
-            var studentRecords = phoneNumber == null ?
+            var studentRecord = phoneNumber == null ?
                 db.GetRecordsByField("students", "SocialNumber", socialNumber) :
                 db.GetRecordsByField("students", "PhoneNumber", phoneNumber);
 
-            if (studentRecords.Count == 0) return;
+            if(studentRecord == null || studentRecord.Count == 0)
+            {
+                WriteLine("دانشجویی با این شماره ملی یافت نشد.");
+                return;
+            }
 
-            var student = studentRecords[0];
+            var student = studentRecord[0];
             WriteLine($"نام کامل: {student["FullName"]}");
             WriteLine($"کد ملی: {student["SocialNumber"]}");
             WriteLine($"شماره دانشجویی: {student["StudentID"]}");
@@ -372,8 +375,13 @@ namespace FinalProj
         }
         public static void ShowFullStudentInfo(DatabaseManager db, string socialNumber)
         {
-            var studentRecords = db.GetRecordsByField("students", "SocialNumber", socialNumber);
-            if (studentRecords.Count == 0) return; var student = studentRecords[0];
+            var studentRecord = db.GetRecordsByField("students", "SocialNumber", socialNumber);
+            if (studentRecord == null || studentRecord.Count == 0)
+            {
+                WriteLine("دانشجویی با این شماره ملی یافت نشد.");
+                return;
+            }
+            var student = studentRecord[0];
             int roomId = student["RoomId"] != DBNull.Value ? Convert.ToInt32(student["RoomId"]) : -1;
             int blockId = student["BlockId"] != DBNull.Value ? Convert.ToInt32(student["BlockId"]) : -1;
             string roomNumber = "نامشخص", blockName = "نامشخص", dormitoryName = "نامشخص";
@@ -420,747 +428,7 @@ namespace FinalProj
             if (equipmentList.Count == 0) WriteLine("بدون تجهیزات");
             else equipmentList.ForEach(item => WriteLine($"- {item}"));
         }
-        public static void RegisterStudent(DatabaseManager db)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            p[['87'pp87]]
+        public static void RegisterDormitoryStudent(DatabaseManager db,Dictionary<string,object> info)
         {
             WriteLine("لیست خوابگاه‌ها:");
             var dormitories = db.GetAllRecords("Dormitories");
@@ -1195,26 +463,17 @@ namespace FinalProj
             Write("آیدی اتاق انتخابی: ");
             int roomIdChosen = int.Parse(ReadLine());
 
-            Write("نام کامل: ");
-            string name = ReadLine();
-            Write("شماره ملی: ");
-            string socialNumber = ReadLine();
-            Write("شماره تماس: ");
-            string phone = ReadLine();
-            Write("آدرس: ");
-            string address = ReadLine();
-            Write("شماره دانشجویی: ");
-            string studentId = ReadLine();
 
-            var student = new Student(name, socialNumber, phone, address, studentId);
-            student.AssignAccommodation(dormitoryId.ToString(), blockId.ToString(), roomIdChosen.ToString());
 
-            AddStudent(db, student);
+            info.Add("RoomId", roomIdChosen.ToString());
+            info.Add("BlockId",blockId.ToString());
+            info.Add("DormitoryId",dormitoryId.ToString());
+            db.InsertRecord("students", info);
         }
         public static void ChangeDoirmiBlckRoom(DatabaseManager db, string socialNumber)
         {
-            var student = db.GetRecordsByField("students", "SocialNumber", socialNumber);
-            if (student == null || student.Count == 0)
+            var studentRecord = db.GetRecordsByField("students", "SocialNumber", socialNumber);
+            if (studentRecord == null || studentRecord.Count == 0)
             {
                 WriteLine("دانشجویی با این شماره ملی یافت نشد.");
                 return;
@@ -1224,7 +483,7 @@ namespace FinalProj
             var dormitories = db.GetAllRecords("Dormitories");
             foreach (var dorm in dormitories)
             {
-                if (student[0]["DormitoryId"].ToString() != dorm["Id"].ToString())
+                if (studentRecord[0]["DormitoryId"].ToString() != dorm["Id"].ToString())
                     WriteLine($"{dorm["Id"]}: {dorm["Name"]} - {dorm["Address"]}");
                 else
                     WriteLine($"-{dorm["Id"]}: {dorm["Name"]} - {dorm["Address"]}");
@@ -1248,7 +507,7 @@ namespace FinalProj
             var blocks = db.GetRecordsByField("Blocks", "DormitoryId", dormitoryId);
             foreach (var block in blocks)
             {
-                if (student[0]["BlockId"].ToString() != block["Id"].ToString())
+                if (studentRecord[0]["BlockId"].ToString() != block["Id"].ToString())
                     WriteLine($"{block["Id"]}: {block["Name"]}");
                 else
                     WriteLine($"-{block["Id"]}: {block["Name"]}");
@@ -1279,7 +538,7 @@ namespace FinalProj
                 if (remaining > 0)
                 {
                     hasAvailableRoom = true;
-                    if (student[0]["RoomId"].ToString() != room["Id"].ToString())
+                    if (studentRecord[0]["RoomId"].ToString() != room["Id"].ToString())
                         WriteLine($"{room["Id"]}: اتاق {room["RoomNumber"]} - باقی‌مانده {remaining}");
                     else
                         WriteLine($"-{room["Id"]}: اتاق {room["RoomNumber"]} - باقی‌مانده {remaining}");
@@ -1308,11 +567,11 @@ namespace FinalProj
 
             var newDormBlckRoom = new Dictionary<string, object>
     {
-        {"FullName", student[0]["FullName"]},
-        {"SocialNumber", student[0]["SocialNumber"]},
-        {"PhoneNumber", student[0]["PhoneNumber"]},
-        {"Address", student[0]["Address"]},
-        {"StudentID", student[0]["StudentID"]},
+        {"FullName", studentRecord[0]["FullName"]},
+        {"SocialNumber", studentRecord[0]["SocialNumber"]},
+        {"PhoneNumber", studentRecord[0]["PhoneNumber"]},
+        {"Address", studentRecord[0]["Address"]},
+        {"StudentID", studentRecord[0]["StudentID"]},
         {"RoomId", roomIdChosen},
         {"BlockId", blockId},
         {"DormitoryId", dormitoryId}
