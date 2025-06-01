@@ -286,12 +286,19 @@ namespace FinalProj
 
 	    public void addEquipmentToDB(Equipment newEquipment) {
 		    Dictionary<string, object> info = newEquipment.ToDictionary();
-		    // search db for id of room
-		    // if a shared equipment search db for id of student
-		    // add ids to dictionary
-		    // add dictionary to db the same way as in student
 		    
+		    info["RoomId"] = db.GetRecordsByField("Rooms", "Id", newEquipment._room.Id)[0]["Id"];
+
+		    if (newEquipment.GetType() == typeof(SharedEquipment)) {
+			    info["OwnerId"] = db.GetRecordsByField("Students", "SocialNumber", newEquipment._owner._socialNumber)[0]["Id"];
+		    }
+		    else {
+			    info.Add("OwnerId", DBNull);
+		    }
+		    
+		    db.InsertRecord("Equipment", info);
 	    }
+
 	    public void registerNewEquipment(){
 		    Write("type of equipment: ");
 		    string type = ReadLine();
@@ -302,12 +309,12 @@ namespace FinalProj
 
 		    Equipment newEquipment = new Equipment(type, partnumber, propertynumber, condition);
 
-		    db.addEquipmentToDB(newEquipment); // this is not constructed yet.
+		    db.addEquipmentToDB(newEquipment); // this is not fully constructed yet.
 	    }
 
 	    public void assignEquipmentToRoom(Room room) {
 		    Write("Choose an equipment to assign to specified room: ");
-		    string equipmentName = ReadLine();
+		    string equipmentType = ReadLine();
 		    // search the db for all available (ie not-assigned to any room) equipment
 		    // update database for both the room's equipment and the equipment's room
 	    }
