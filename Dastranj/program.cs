@@ -160,6 +160,24 @@ namespace FinalProj
             _room = room;
         }
 
+	public Equipment(string type, string partNumber, string propertyNumber, Condition condition) {
+		_type = type;
+		_partNumber = partNumber;
+		_propertyNumber = propertyNumber;
+		_condition = condition;
+		_room = null;
+	}
+
+	public virtual Dictionary<string, object> ToDictionary() {
+		return new Dictionary<string, object> {
+			{"Type", this._type},
+			{"PartNumber", this._partNumber},
+			{"PropertyNumber", this._propertyNumber},
+			{"Condition", this._condition},
+			{"RoomId", this._room };
+		}
+	}
+
 
     }
 
@@ -168,6 +186,13 @@ namespace FinalProj
 
 	    public PersonalEquipment(string type, string partNumber, string propertyNumber, Condition condition, Room room, Student owner):base(type, partNumber, propertyNumber, condition, room) {
 		    _owner = owner;
+	    }
+
+	    public override Dictionary<string, object> ToDictionary() {
+		    Dictionary<string, object> outputDict = base.ToDictionary();
+		    outputDict.Add("OwnerId", this._owner);
+		    return outputDict;
+		 
 	    }
     }
 
@@ -250,5 +275,45 @@ namespace FinalProj
             _equipment = equipment;
             _students = students;
         }
+    }
+
+    class EquipmentManager {
+	    DatabaseManager db;
+
+	    public EquipmentManager(DatabaseManager DB) {
+		    db = DB;
+	    }
+
+	    public void addEquipmentToDB(Equipment newEquipment) {
+		    Dictionary<string, object> info = newEquipment.ToDictionary();
+		    // search db for id of room
+		    // if a shared equipment search db for id of student
+		    // add ids to dictionary
+		    // add dictionary to db the same way as in student
+		    
+	    }
+	    public void registerNewEquipment(){
+		    Write("type of equipment: ");
+		    string type = ReadLine();
+		    Write("what condition is the equipment in: ");
+		    string condition = ReadLine();
+		    string partnumber;
+		    string propertynumber;
+
+		    Equipment newEquipment = new Equipment(type, partnumber, propertynumber, condition);
+
+		    db.addEquipmentToDB(newEquipment); // this is not constructed yet.
+	    }
+
+	    public void assignEquipmentToRoom(Room room) {
+		    Write("Choose an equipment to assign to specified room: ");
+		    string equipmentName = ReadLine();
+		    // search the db for all available (ie not-assigned to any room) equipment
+		    // update database for both the room's equipment and the equipment's room
+	    }
+
+
+
+
     }
 }
