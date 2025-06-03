@@ -287,7 +287,12 @@ namespace FinalProj
 	    public void addEquipmentToDB(Equipment newEquipment) {
 		    Dictionary<string, object> info = newEquipment.ToDictionary();
 		    
-		    info["RoomId"] = db.GetRecordsByField("Rooms", "Id", newEquipment._room.Id)[0]["Id"];
+		    if (newEquipment._room == null) {
+			    info["RoomId"] = DBNull;
+		    }
+		    else {
+			    info["RoomId"] = db.GetRecordsByField("Rooms", "Id", newEquipment._room.Id)[0]["Id"];
+		    }
 
 		    if (newEquipment.GetType() == typeof(SharedEquipment)) {
 			    info["OwnerId"] = db.GetRecordsByField("Students", "SocialNumber", newEquipment._owner._socialNumber)[0]["Id"];
@@ -299,7 +304,10 @@ namespace FinalProj
 		    db.InsertRecord("Equipment", info);
 	    }
 
+	    public void updateEquipment(Equipment existingEquipment);
+
 	    public void registerNewEquipment(){
+		    // add this method to a method in Program class and remove it from here
 		    Write("type of equipment: ");
 		    string type = ReadLine();
 		    Write("what condition is the equipment in: ");
@@ -309,14 +317,29 @@ namespace FinalProj
 
 		    Equipment newEquipment = new Equipment(type, partnumber, propertynumber, condition);
 
-		    db.addEquipmentToDB(newEquipment); // this is not fully constructed yet.
+		    addEquipmentToDB(newEquipment);
 	    }
 
-	    public void assignEquipmentToRoom(Room room) {
-		    Write("Choose an equipment to assign to specified room: ");
-		    string equipmentType = ReadLine();
-		    // search the db for all available (ie not-assigned to any room) equipment
-		    // update database for both the room's equipment and the equipment's room
+	    public void assignEquipmentToRoom(Equipment equipmentToAssign, Room room) {
+		    // this method is for shared Equipment
+
+		    object RoomId = db.GetRecordsByField("Rooms", "RoomId", room.roomId)[0]["Id"]; // need implementation for roomId in Room class
+		    Dictionary<string, object> EquipmentUpdatedValues = Dictionary<string, object> {
+			    {"RoomId", RoomId}
+		    };
+		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", equipmentToAssign._propertyNumber);
+	    }
+	    
+	    public assignEquipmentToRoom(PersonalEquipment equipmentToAssign, Room room, Student student) {
+		    // this method is for personal equipment
+		    
+		    object StudentId = db.GetRecordsByField("Students", "SocialNumber", student._socialNumber)[0]["Id"];
+		    object RoomId = db.GetRecordsByField("Rooms", "RoomId", room.roomId)[0]["Id"]; // need implementation for roomId in Room class
+		    Dictionary<string, object> EquipmentUpdatedValues = Dictionary<string, object> {
+			    {"RoomId", RoomId},
+			    {"OwnerId", StudentId}
+		    };
+		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", equipmentToAssign._propertyNumber);
 	    }
 
 
