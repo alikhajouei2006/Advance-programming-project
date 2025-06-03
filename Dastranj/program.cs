@@ -330,7 +330,7 @@ namespace FinalProj
 		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", equipmentToAssign._propertyNumber);
 	    }
 	    
-	    public assignEquipmentToRoom(PersonalEquipment equipmentToAssign, Room room, Student student) {
+	    public void assignEquipmentToRoom(PersonalEquipment equipmentToAssign, Room room, Student student) {
 		    // this method is for personal equipment
 		    
 		    object StudentId = db.GetRecordsByField("Students", "SocialNumber", student._socialNumber)[0]["Id"];
