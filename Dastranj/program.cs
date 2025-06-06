@@ -298,8 +298,6 @@ namespace FinalProj
 		    db.InsertRecord("Equipment", info);
 	    }
 
-	    public void updateEquipment(DatabaseManager db, Equipment existingEquipment);
-
 	    public void registerNewEquipment(){
 		    // add this method to a method in Program class and remove it from here
 		    Write("type of equipment: ");
@@ -355,7 +353,7 @@ namespace FinalProj
 		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
 	    }
 
-	    public void changeEquipmentCondition(DatabaseManager db, string partNumber, Condition condition) {
+	    public void changeEquipmentCondition(DatabaseManager db, string propertyNumber, Condition condition) {
 		    Dictionary<string, object> UpdatedCondition = Dictionary<string, object> {
 			    {"Condition", (string)condition}
 		    };
