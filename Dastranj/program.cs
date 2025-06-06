@@ -278,13 +278,7 @@ namespace FinalProj
     }
 
     class EquipmentManager {
-	    DatabaseManager db;
-
-	    public EquipmentManager(DatabaseManager DB) {
-		    db = DB;
-	    }
-
-	    public void addEquipmentToDB(Equipment newEquipment) {
+	    public void addEquipmentToDB(DatabaseManager db, Equipment newEquipment) {
 		    Dictionary<string, object> info = newEquipment.ToDictionary();
 		    
 		    if (newEquipment._room == null) {
@@ -304,7 +298,7 @@ namespace FinalProj
 		    db.InsertRecord("Equipment", info);
 	    }
 
-	    public void updateEquipment(Equipment existingEquipment);
+	    public void updateEquipment(DatabaseManager db, Equipment existingEquipment);
 
 	    public void registerNewEquipment(){
 		    // add this method to a method in Program class and remove it from here
@@ -320,27 +314,46 @@ namespace FinalProj
 		    addEquipmentToDB(newEquipment);
 	    }
 
-	    public void assignEquipmentToRoom(Equipment equipmentToAssign, Room room) {
-		    // this method is for shared Equipment
-
-		    object RoomId = db.GetRecordsByField("Rooms", "RoomId", room.roomId)[0]["Id"]; // need implementation for roomId in Room class
+	    public void assignEquipmentToRoom(DatabaseManager db, Equipment equipmentToAssign, Room room) {
+		    var RoomId = db.GetRecordsByField("Rooms", "RoomId", room.Id)[0]["Id"]; // need implementation for Id in Room class and adding RoomId column to db
 		    Dictionary<string, object> EquipmentUpdatedValues = Dictionary<string, object> {
 			    {"RoomId", RoomId}
 		    };
 		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", equipmentToAssign._propertyNumber);
 	    }
 	    
-	    public void assignEquipmentToRoom(PersonalEquipment equipmentToAssign, Room room, Student student) {
-		    // this method is for personal equipment
-		    
-		    object StudentId = db.GetRecordsByField("Students", "SocialNumber", student._socialNumber)[0]["Id"];
-		    object RoomId = db.GetRecordsByField("Rooms", "RoomId", room.roomId)[0]["Id"]; // need implementation for roomId in Room class
+	    public void assignEquipmentToStudent(DatabaseManager db, PersonalEquipment equipmentToAssign, Student student) { // maybe use a string prorpertyNumber instead of PersonalEquipment equipmentToAssign ??
+		    var StudentId = db.GetRecordsByField("Students", "SocialNumber", student._socialNumber)[0]["Id"];
+		    var RoomId = db.GetRecordsByField("Rooms", "RoomId", student._room.Id)[0]["Id"]; // need implementation for Id in Room class and adding RoomId column to db
 		    Dictionary<string, object> EquipmentUpdatedValues = Dictionary<string, object> {
 			    {"RoomId", RoomId},
 			    {"OwnerId", StudentId}
 		    };
 		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", equipmentToAssign._propertyNumber);
 	    }
+
+	    public void exchangeEquipmentBetweenRooms(DatabaseManager db, string propertyNumber, Room destinationRoom) {
+		    var destinationRoomId = db.GetRecordsByField("Rooms", "RoomId", destinationRoom.Id)[0]["Id"];
+
+		    Dictionary<string, object> ChangedRoomId = Dictionary<string, object> {
+			    {"RoomId", destinationRoomId}
+		    };
+
+		    db.UpdateRecord("Equipment", ChangedRoomId, "PropertyNumber", propertyNumber);
+	    }
+
+	    public void exchangeEquipmentBetweenStudents(DatabaseManager db, string propertyNumber, Student receivingStudent) { // maybe use social number directly instead of a student object since the input of a form will be a social number ??
+		    Dictionary<string, object> studentDict = db.GetRecordsByField("Students", "SocialNumber", receivingStudent._socialNumber)[0];
+		    var ownerId = studentDict["Id"];
+		    var roomId = studentDict["RoomId"];
+
+		    Dictionary<string, object> EquipmentUpdatedValues = Dictionary<string, object> {
+			    {"RoomId", roomId},
+			    {"OwnerId", ownerId}
+		    };
+		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
+	    }
+
 
 
 
