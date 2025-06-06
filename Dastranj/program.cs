@@ -136,11 +136,11 @@ namespace FinalProj
         }
     }
 
-    enum Condition
+    enum Condition : string
     {
-        Intact,
-        Broken,
-        Reparing,
+        Intact = "Works properly",
+        Broken = "Needs repairing",
+        Reparing = "Is being repaired",
     }
 
     class Equipment
@@ -353,8 +353,6 @@ namespace FinalProj
 		    };
 		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
 	    }
-
-
 
 
 
