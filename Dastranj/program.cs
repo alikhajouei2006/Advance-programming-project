@@ -351,7 +351,16 @@ namespace FinalProj
 			    {"RoomId", roomId},
 			    {"OwnerId", ownerId}
 		    };
+
 		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
+	    }
+
+	    public void changeEquipmentCondition(DatabaseManager db, string partNumber, Condition condition) {
+		    Dictionary<string, object> UpdatedCondition = Dictionary<string, object> {
+			    {"Condition", (string)condition}
+		    };
+
+		    db.UpdateRecord("Equipment", UpdatedCondition, "PropertyNumber", propertyNumber);
 	    }
 
 
