@@ -298,26 +298,27 @@ namespace FinalProj
 		    db.InsertRecord("Equipment", info);
 	    }
 
-	    public void assignEquipmentToRoom(DatabaseManager db, Equipment equipmentToAssign, Room room) {
-		    var RoomId = db.GetRecordsByField("Rooms", "RoomId", room.Id)[0]["Id"]; // need implementation for Id in Room class and adding RoomId column to db
+	    public void assignEquipmentToRoom(DatabaseManager db, string propertyNumber, string roomId) {
+		    var RoomId = db.GetRecordsByField("Rooms", "RoomId", roomId)[0]["Id"]; // need implementation for Id in Room class and adding RoomId column to db
 		    Dictionary<string, object> EquipmentUpdatedValues = Dictionary<string, object> {
 			    {"RoomId", RoomId}
 		    };
-		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", equipmentToAssign._propertyNumber);
+		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
 	    }
 	    
-	    public void assignEquipmentToStudent(DatabaseManager db, PersonalEquipment equipmentToAssign, Student student) { // maybe use a string prorpertyNumber instead of PersonalEquipment equipmentToAssign ??
-		    var StudentId = db.GetRecordsByField("Students", "SocialNumber", student._socialNumber)[0]["Id"];
-		    var RoomId = db.GetRecordsByField("Rooms", "RoomId", student._room.Id)[0]["Id"]; // need implementation for Id in Room class and adding RoomId column to db
+	    public void assignEquipmentToStudent(DatabaseManager db, string propertyNumber, string socialNumber) {
+		    Dictionary<string, object> studentDict = db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
+		    var StudentId = studentDict["Id"];
+		    var RoomId = studentDict["RoomId"];
 		    Dictionary<string, object> EquipmentUpdatedValues = Dictionary<string, object> {
 			    {"RoomId", RoomId},
 			    {"OwnerId", StudentId}
 		    };
-		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", equipmentToAssign._propertyNumber);
+		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", string propertyNumber);
 	    }
 
-	    public void exchangeEquipmentBetweenRooms(DatabaseManager db, string propertyNumber, Room destinationRoom) {
-		    var destinationRoomId = db.GetRecordsByField("Rooms", "RoomId", destinationRoom.Id)[0]["Id"];
+	    public void exchangeEquipmentBetweenRooms(DatabaseManager db, string propertyNumber, string roomId) {
+		    var destinationRoomId = db.GetRecordsByField("Rooms", "RoomId", roomId)[0]["Id"];
 
 		    Dictionary<string, object> ChangedRoomId = Dictionary<string, object> {
 			    {"RoomId", destinationRoomId}
@@ -326,8 +327,8 @@ namespace FinalProj
 		    db.UpdateRecord("Equipment", ChangedRoomId, "PropertyNumber", propertyNumber);
 	    }
 
-	    public void exchangeEquipmentBetweenStudents(DatabaseManager db, string propertyNumber, Student receivingStudent) { // maybe use social number directly instead of a student object since the input of a form will be a social number ??
-		    Dictionary<string, object> studentDict = db.GetRecordsByField("Students", "SocialNumber", receivingStudent._socialNumber)[0];
+	    public void exchangeEquipmentBetweenStudents(DatabaseManager db, string propertyNumber, string socialNumber) {
+		    Dictionary<string, object> studentDict = db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
 		    var ownerId = studentDict["Id"];
 		    var roomId = studentDict["RoomId"];
 
