@@ -278,7 +278,7 @@ namespace FinalProj
     }
 
     class EquipmentManager {
-	    public void addEquipmentToDB(Equipment newEquipment) {
+	    public static void addEquipmentToDB(Equipment newEquipment) {
 		    Dictionary<string, object> info = newEquipment.ToDictionary();
 		    
 		    if (newEquipment._room == null) {
@@ -298,7 +298,7 @@ namespace FinalProj
 		    Program.db.InsertRecord("Equipment", info);
 	    }
 
-	    public void assignEquipmentToRoom(string propertyNumber, string roomId) {
+	    public static void assignEquipmentToRoom(string propertyNumber, string roomId) {
 		    var RoomId = Program.db.GetRecordsByField("Rooms", "RoomId", roomId)[0]["Id"]; // need implementation for Id in Room class and adding RoomId column to db
 		    Dictionary<string, object> EquipmentUpdatedValues = Dictionary<string, object> {
 			    {"RoomId", RoomId}
@@ -306,7 +306,7 @@ namespace FinalProj
 		    Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
 	    }
 	    
-	    public void assignEquipmentToStudent(string propertyNumber, string socialNumber) {
+	    public static void assignEquipmentToStudent(string propertyNumber, string socialNumber) {
 		    Dictionary<string, object> studentDict = Prorgam.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
 		    var StudentId = studentDict["Id"];
 		    var RoomId = studentDict["RoomId"];
@@ -317,7 +317,7 @@ namespace FinalProj
 		    Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", string propertyNumber);
 	    }
 
-	    public void exchangeEquipmentBetweenRooms(string propertyNumber, string roomId) {
+	    public static void exchangeEquipmentBetweenRooms(string propertyNumber, string roomId) {
 		    var destinationRoomId = Program.db.GetRecordsByField("Rooms", "RoomId", roomId)[0]["Id"];
 
 		    Dictionary<string, object> ChangedRoomId = Dictionary<string, object> {
@@ -327,7 +327,7 @@ namespace FinalProj
 		    Program.db.UpdateRecord("Equipment", ChangedRoomId, "PropertyNumber", propertyNumber);
 	    }
 
-	    public void exchangeEquipmentBetweenStudents(string propertyNumber, string socialNumber) {
+	    public static void exchangeEquipmentBetweenStudents(string propertyNumber, string socialNumber) {
 		    Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
 		    var ownerId = studentDict["Id"];
 		    var roomId = studentDict["RoomId"];
@@ -340,7 +340,7 @@ namespace FinalProj
 		    Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
 	    }
 
-	    public void changeEquipmentCondition(string propertyNumber, Condition condition) {
+	    public static void changeEquipmentCondition(string propertyNumber, Condition condition) {
 		    Dictionary<string, object> UpdatedCondition = Dictionary<string, object> {
 			    {"Condition", (string)condition}
 		    };
@@ -353,18 +353,16 @@ namespace FinalProj
     }
 
     internal static class Program {
-	    public static EquipmentManager equipmgr;
 	    public static void registerNewEquipment(){
-	    Write("type of equipment: ");
-	    string type = ReadLine();
-	    Write("what condition is the equipment in: ");
-	    string condition = ReadLine();
-	    string partnumber;
-	    string propertynumber;
+		    Write("type of equipment: ");
+		    string type = ReadLine();
+		    Write("what condition is the equipment in: ");
+		    string condition = ReadLine();
+		    string partnumber;
+		    string propertynumber;
 
-	    Equipment newEquipment = new Equipment(type, partnumber, propertynumber, condition);
-
-	    equipmgr.addEquipmentToDB(newEquipment);
+		    Equipment newEquipment = new Equipment(type, partnumber, propertynumber, condition);
+		    EquipmentManager.addEquipmentToDB(newEquipment);
 	    }
 
 	    public static Room chooseRoom {
