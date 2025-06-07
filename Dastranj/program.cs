@@ -353,7 +353,8 @@ namespace FinalProj
     }
 
     internal static class Program {
-	    public void registerNewEquipment(){
+	    public static EquipmentManager equipmgr;
+	    public static void registerNewEquipment(){
 	    Write("type of equipment: ");
 	    string type = ReadLine();
 	    Write("what condition is the equipment in: ");
@@ -363,8 +364,25 @@ namespace FinalProj
 
 	    Equipment newEquipment = new Equipment(type, partnumber, propertynumber, condition);
 
-		    addEquipmentToDB(newEquipment);
+	    equipmgr.addEquipmentToDB(newEquipment);
 	    }
+
+	    public static Room chooseRoom {
+		    List<Dictionary<string, object>> allRooms = Program.db.GetAllRecords("Rooms");
+		    
+		    WriteLine("avialable rooms: ");
+		    for (int i=0; i<allRooms.Count; i++) {
+			    Dictionary<string, object> room = allRooms[i];
+			    WriteLine($"{i}: Room number {room["RoomNumber"]} with block ID: {room["BlockId"]}");
+		    }
+
+		    Write("specify a room from the above list: ");
+		    Dictionary<string, object> specifiedRoomDict = allRooms[int.Parse(ReadLine())];
+
+		    Room specifiedRoom = Room.FromDictionary(specifiedRoomDict);
+		    return specifiedRoom'
+	    }
+
     }
 
 }
