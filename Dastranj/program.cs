@@ -278,57 +278,57 @@ namespace FinalProj
     }
 
     class EquipmentManager {
-	    public void addEquipmentToDB(DatabaseManager db, Equipment newEquipment) {
+	    public void addEquipmentToDB(Equipment newEquipment) {
 		    Dictionary<string, object> info = newEquipment.ToDictionary();
 		    
 		    if (newEquipment._room == null) {
 			    info["RoomId"] = DBNull;
 		    }
 		    else {
-			    info["RoomId"] = db.GetRecordsByField("Rooms", "Id", newEquipment._room.Id)[0]["Id"];
+			    info["RoomId"] = Program.db.GetRecordsByField("Rooms", "Id", newEquipment._room.Id)[0]["Id"];
 		    }
 
 		    if (newEquipment.GetType() == typeof(SharedEquipment)) {
-			    info["OwnerId"] = db.GetRecordsByField("Students", "SocialNumber", newEquipment._owner._socialNumber)[0]["Id"];
+			    info["OwnerId"] = Program.db.GetRecordsByField("Students", "SocialNumber", newEquipment._owner._socialNumber)[0]["Id"];
 		    }
 		    else {
 			    info.Add("OwnerId", DBNull);
 		    }
 		    
-		    db.InsertRecord("Equipment", info);
+		    Program.db.InsertRecord("Equipment", info);
 	    }
 
-	    public void assignEquipmentToRoom(DatabaseManager db, string propertyNumber, string roomId) {
-		    var RoomId = db.GetRecordsByField("Rooms", "RoomId", roomId)[0]["Id"]; // need implementation for Id in Room class and adding RoomId column to db
+	    public void assignEquipmentToRoom(string propertyNumber, string roomId) {
+		    var RoomId = Program.db.GetRecordsByField("Rooms", "RoomId", roomId)[0]["Id"]; // need implementation for Id in Room class and adding RoomId column to db
 		    Dictionary<string, object> EquipmentUpdatedValues = Dictionary<string, object> {
 			    {"RoomId", RoomId}
 		    };
-		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
+		    Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
 	    }
 	    
-	    public void assignEquipmentToStudent(DatabaseManager db, string propertyNumber, string socialNumber) {
-		    Dictionary<string, object> studentDict = db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
+	    public void assignEquipmentToStudent(string propertyNumber, string socialNumber) {
+		    Dictionary<string, object> studentDict = Prorgam.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
 		    var StudentId = studentDict["Id"];
 		    var RoomId = studentDict["RoomId"];
 		    Dictionary<string, object> EquipmentUpdatedValues = Dictionary<string, object> {
 			    {"RoomId", RoomId},
 			    {"OwnerId", StudentId}
 		    };
-		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", string propertyNumber);
+		    Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", string propertyNumber);
 	    }
 
-	    public void exchangeEquipmentBetweenRooms(DatabaseManager db, string propertyNumber, string roomId) {
-		    var destinationRoomId = db.GetRecordsByField("Rooms", "RoomId", roomId)[0]["Id"];
+	    public void exchangeEquipmentBetweenRooms(string propertyNumber, string roomId) {
+		    var destinationRoomId = Program.db.GetRecordsByField("Rooms", "RoomId", roomId)[0]["Id"];
 
 		    Dictionary<string, object> ChangedRoomId = Dictionary<string, object> {
 			    {"RoomId", destinationRoomId}
 		    };
 
-		    db.UpdateRecord("Equipment", ChangedRoomId, "PropertyNumber", propertyNumber);
+		    Program.db.UpdateRecord("Equipment", ChangedRoomId, "PropertyNumber", propertyNumber);
 	    }
 
-	    public void exchangeEquipmentBetweenStudents(DatabaseManager db, string propertyNumber, string socialNumber) {
-		    Dictionary<string, object> studentDict = db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
+	    public void exchangeEquipmentBetweenStudents(string propertyNumber, string socialNumber) {
+		    Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
 		    var ownerId = studentDict["Id"];
 		    var roomId = studentDict["RoomId"];
 
@@ -337,15 +337,15 @@ namespace FinalProj
 			    {"OwnerId", ownerId}
 		    };
 
-		    db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
+		    Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
 	    }
 
-	    public void changeEquipmentCondition(DatabaseManager db, string propertyNumber, Condition condition) {
+	    public void changeEquipmentCondition(string propertyNumber, Condition condition) {
 		    Dictionary<string, object> UpdatedCondition = Dictionary<string, object> {
 			    {"Condition", (string)condition}
 		    };
 
-		    db.UpdateRecord("Equipment", UpdatedCondition, "PropertyNumber", propertyNumber);
+		    Program.db.UpdateRecord("Equipment", UpdatedCondition, "PropertyNumber", propertyNumber);
 	    }
 
 
