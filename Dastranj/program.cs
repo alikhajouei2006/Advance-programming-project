@@ -298,20 +298,6 @@ namespace FinalProj
 		    db.InsertRecord("Equipment", info);
 	    }
 
-	    public void registerNewEquipment(){
-		    // add this method to a method in Program class and remove it from here
-		    Write("type of equipment: ");
-		    string type = ReadLine();
-		    Write("what condition is the equipment in: ");
-		    string condition = ReadLine();
-		    string partnumber;
-		    string propertynumber;
-
-		    Equipment newEquipment = new Equipment(type, partnumber, propertynumber, condition);
-
-		    addEquipmentToDB(newEquipment);
-	    }
-
 	    public void assignEquipmentToRoom(DatabaseManager db, Equipment equipmentToAssign, Room room) {
 		    var RoomId = db.GetRecordsByField("Rooms", "RoomId", room.Id)[0]["Id"]; // need implementation for Id in Room class and adding RoomId column to db
 		    Dictionary<string, object> EquipmentUpdatedValues = Dictionary<string, object> {
@@ -364,4 +350,20 @@ namespace FinalProj
 
 
     }
+
+    internal static class Program {
+	    public void registerNewEquipment(){
+	    Write("type of equipment: ");
+	    string type = ReadLine();
+	    Write("what condition is the equipment in: ");
+	    string condition = ReadLine();
+	    string partnumber;
+	    string propertynumber;
+
+	    Equipment newEquipment = new Equipment(type, partnumber, propertynumber, condition);
+
+		    addEquipmentToDB(newEquipment);
+	    }
+    }
+
 }
