@@ -168,14 +168,29 @@ namespace FinalProj
 		_room = null;
 	}
 
+	public Room room {
+		set { this._room = value };
+		get { return _room };
+	}
+
 	public virtual Dictionary<string, object> ToDictionary() {
 		return new Dictionary<string, object> {
 			{"Type", this._type},
 			{"PartNumber", this._partNumber},
 			{"PropertyNumber", this._propertyNumber},
 			{"Condition", this._condition},
-			{"RoomId", this._room };
+			{"RoomId", this.room.Id};
 		}
+	}
+
+	public static Equipment FromDictionary(Dictionary<string, object> equipmentDict) {
+		Equipment equipment = new Equipment(equipmentDict["Type"].ToString(), equipmentDict["PartNumber"].ToString(), equipmentDict["PropertyNumber"].ToString(), (Condition)equipmentDict["Condition"]);
+		if (equipmentDict["RoomId"] != DBNull.Value) {
+			Dictionary<string, object> roomDict = RoomManager.getRoomDict(equipmentDict["RoomId"].ToInt32());
+			Room equipmentRoom = Room.FromDictionary(roomDict);
+			equipment.room = equipmentRoom;
+		}
+		return equipment;
 	}
 
 
