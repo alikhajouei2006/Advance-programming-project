@@ -275,6 +275,18 @@ namespace FinalProj
             _equipment = equipment;
             _students = students;
         }
+	public Room(int no_room, int no_floor, in capacity, string block) {
+		// this constructor is for cases when we don't want to specify students and equipment in the room
+		_NO_room = no_room;
+		_NO_floors = no_floor;
+		_capacity = capacity;
+		_block = block;
+	}
+
+	public static Room FromDictionary(Dictionary<string, object> roomDict) {
+		room = new Room(roomDict["RoomNumber"].ToInt32(), roomDict["FloorNumber"].ToInt32(), roomDict["Capacity"].ToInt32(), roomDict["BlockId"].ToString());
+		return room;
+	}
     }
 
     class EquipmentManager {
@@ -377,8 +389,8 @@ namespace FinalProj
 		    Write("specify a room from the above list: ");
 		    Dictionary<string, object> specifiedRoomDict = allRooms[int.Parse(ReadLine())];
 
-		    Room specifiedRoom = Room.FromDictionary(specifiedRoomDict);
-		    return specifiedRoom'
+		    Room specifiedRoom = Room.FromDictionary(specifiedRoomDict); // implementing FromDictionary method in Room class
+		    return specifiedRoom;
 	    }
 
     }
