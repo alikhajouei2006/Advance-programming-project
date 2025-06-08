@@ -149,15 +149,15 @@ namespace FinalProj
         protected string _partNumber;
         protected string _propertyNumber;
         protected Condition _condition;
-        protected Room _room;
+        protected int _RoomId;
 
-        public Equipment(string type, string partNumber, string propertyNumber, Condition condition, Room room)
+        public Equipment(string type, string partNumber, string propertyNumber, Condition condition, int roomid)
         {
             _type = type;
             _partNumber = partNumber;
             _propertyNumber = propertyNumber;
             _condition = condition;
-            _room = room;
+            _RoomId = roomid;
         }
 
 	public Equipment(string type, string partNumber, string propertyNumber, Condition condition) {
@@ -165,12 +165,7 @@ namespace FinalProj
 		_partNumber = partNumber;
 		_propertyNumber = propertyNumber;
 		_condition = condition;
-		_room = null;
-	}
-
-	public Room room {
-		set { this._room = value };
-		get { return _room };
+		_RoomId = null;
 	}
 
 	public virtual Dictionary<string, object> ToDictionary() {
@@ -179,17 +174,12 @@ namespace FinalProj
 			{"PartNumber", this._partNumber},
 			{"PropertyNumber", this._propertyNumber},
 			{"Condition", this._condition},
-			{"RoomId", this.room.Id};
+			{"RoomId", this._RoomId};
 		}
 	}
 
 	public static Equipment FromDictionary(Dictionary<string, object> equipmentDict) {
-		Equipment equipment = new Equipment(equipmentDict["Type"].ToString(), equipmentDict["PartNumber"].ToString(), equipmentDict["PropertyNumber"].ToString(), (Condition)equipmentDict["Condition"]);
-		if (equipmentDict["RoomId"] != DBNull.Value) {
-			Dictionary<string, object> roomDict = RoomManager.getRoomDict(equipmentDict["RoomId"].ToInt32());
-			Room equipmentRoom = Room.FromDictionary(roomDict);
-			equipment.room = equipmentRoom;
-		}
+		Equipment equipment = new Equipment(equipmentDict["Type"].ToString(), equipmentDict["PartNumber"].ToString(), equipmentDict["PropertyNumber"].ToString(), (Condition)equipmentDict["Condition"], equipmentDict["RoomId"].ToInt32());
 		return equipment;
 	}
 
@@ -308,7 +298,7 @@ namespace FinalProj
 	    public static void addEquipmentToDB(Equipment newEquipment) {
 		    Dictionary<string, object> info = newEquipment.ToDictionary();
 		    
-		    if (newEquipment._room == null) {
+		    if (newEquipment._RoomId == null) {
 			    info["RoomId"] = DBNull;
 		    }
 		    else {
