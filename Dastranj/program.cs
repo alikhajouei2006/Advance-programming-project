@@ -365,7 +365,7 @@ namespace FinalProj
     }
 
     internal static class Program {
-	    public static void registerNewEquipment(){
+	    public static void registerNewEquipment() {
 		    Write("type of equipment: ");
 		    string type = ReadLine();
 		    Write("what condition is the equipment in: ");
@@ -377,7 +377,7 @@ namespace FinalProj
 		    EquipmentManager.addEquipmentToDB(newEquipment);
 	    }
 
-	    public static Room chooseRoom {
+	    public static Room chooseRoom() {
 		    List<Dictionary<string, object>> allRooms = Program.db.GetAllRecords("Rooms");
 		    
 		    WriteLine("avialable rooms: ");
@@ -387,10 +387,28 @@ namespace FinalProj
 		    }
 
 		    Write("specify a room from the above list: ");
-		    Dictionary<string, object> specifiedRoomDict = allRooms[int.Parse(ReadLine())];
+		    int roomIndex = int.Parse(ReadLine());
+		    Dictionary<string, object> specifiedRoomDict = allRooms[roomIndex];
 
 		    Room specifiedRoom = Room.FromDictionary(specifiedRoomDict); // implementing FromDictionary method in Room class
 		    return specifiedRoom;
+	    }
+
+	    public static Equipment chooseEquipment() {
+		    WriteLine("Specify the type of equipment you want: ");
+		    string type = ReadLine();
+		    List<Dictionary<string, object>> allEquipment = Program.db.GetRecordsByField("Equipment", "RoomId", DBNull); // needs to be changed to select all equipment that are not assigned to any room and are of specified type and intact
+		    WriteLine("not assigned equipment: ");
+		    for (int i=0; i<allEquipment.Count; i++) {
+			    Dictionary<string, object> equipment = allEquipment[i];
+			    WriteLine($"Equipment {i}: property number: {equipment["PropertyNumber"]}, Type: {equipment["Type"]} ");
+		    }
+		    Write("Specify an equipment from the above list: ");
+		    int equipmentIndex = int.Parse(ReadLine());
+		    Dictionary<string, object> specifiedEquipmentDict = allEquipment[equipmentIndex];
+
+		    Equipment specifiedEquipment = Equipment.FromDictionary(specifiedEquipmentDict);
+		    return specifiedEquipment;
 	    }
 
     }
