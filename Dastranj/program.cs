@@ -431,6 +431,26 @@ namespace FinalProj
 		    EquipmentManager.assignEquipmentToStudent(equipment._propertyNumber, socialNumber);
 	    }
 
+	    public static void exchangeEquipmentBetweenRooms() {
+		    Write("Choose Destination Room: ");
+		    int destinationRoomId = chooseRoom().Id;
+
+		    Write("enter property number of equipment you want to transfer to the specified room: ");
+		    string propertyNumber = ReadLine();
+
+		    EquipmentManager.exchangeEquipmentBetweenRooms(propertyNumber, destinationRoomId);
+	    }
+
+	    public static void exchangeEquipmentBetweenStudents() {
+		    Write("enter property number of equipment you want to exchange between students: ");
+		    string propertyNumber = ReadLine();
+
+		    Write("Enter social number of student you want to transfer the equipment to: ");
+		    string socialNumber = ReadLine();
+
+		    EquipmentManager.exchangeEquipmentBetweenStudents(propertyNumber, socialNumber);
+	    }
+
     }
 
 }
