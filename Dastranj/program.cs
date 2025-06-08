@@ -267,6 +267,7 @@ namespace FinalProj
     }
     class Room
     {
+	public int Id {get; set;};
         private List<string> _equipment = new List<string>();
         private List<string> _students = new List<string>();
         string _block;
@@ -290,6 +291,7 @@ namespace FinalProj
 
 	public static Room FromDictionary(Dictionary<string, object> roomDict) {
 		room = new Room(roomDict["RoomNumber"].ToInt32(), roomDict["FloorNumber"].ToInt32(), roomDict["Capacity"].ToInt32(), roomDict["BlockId"].ToString());
+		room.Id = roomDict["Id"];
 		return room;
 	}
     }
@@ -414,6 +416,19 @@ namespace FinalProj
 
 		    Equipment specifiedEquipment = Equipment.FromDictionary(specifiedEquipmentDict);
 		    return specifiedEquipment;
+	    }
+
+	    public static void assignEquipmentToRoom() {
+		    Room room = chooseRoom();
+		    Equipment equipment = chooseEquipment();
+		    EquipmentManager.assignEquipmentToRoom(equipment._propertyNumber, room.Id);
+	    }
+	    
+	    public static void assignEquipmentToStudent() {
+		    Equipment equipment = chooseEquipment();
+		    Write("Enter Student's social number");
+		    string socialNumber = ReadLine();
+		    EquipmentManager.assignEquipmentToStudent(equipment._propertyNumber, socialNumber);
 	    }
 
     }
