@@ -111,6 +111,39 @@ namespace FinalProj
             }
         }
     }
+
+    enum RequestStatus:string {
+	    Pending="Pending",
+	    Done="Done",
+    }
+
+    class RepairRequest {
+	    private string propertyNumber;
+	    private RequestStatus status;
+
+	    public RepairRequest(string propertyNumber, RequestStatus status=RequestStatus.Pending) {
+		    this.propertyNumber = propertyNumber;
+		    this.status = status;
+	    }
+
+	    public void setStatusToDone() {
+		    this.status = RequestStatus.Done;
+	    }
+
+	    public Dicrtionary<string, object> ToDictionary() {
+		    Dictionary<string, object> outDict = Dictionary<string, object> {
+			    {"PropertyNumber", this.propertyNumber},
+			    {"Status", (string)this.status}
+		    };
+
+		    return outDict;
+	    }
+
+	    public static FromDictionary(Dictionary<string, object> requestDict) {
+		    return new RepairRequest(requestDict["PropertyNumber"].ToString(), (RequestStatus)requestDict["Status"])
+	    }
+    }
+
     class DormitoryBlockSupervisor : Student
     {
         private string _Role;
