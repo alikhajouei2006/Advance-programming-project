@@ -616,6 +616,14 @@ namespace FinalProj
 			    }
 		    }
 	    }
+	    
+	    public static void showAllRepairRequests() {
+		    List<Dictionary<string, object>> allRepairRequests = Program.db.GetAllRecords("RepairRequests");
+		    foreach (Dictionary<string, object> request in allRepairRequests) {
+			    WriteLine($"Request Number: {request["Id"]}, for Equipment with Property Number: {request["PropertyNumber"]}; Status: {request["Status"]}");
+		    }
+	    }
+
 
     }
 
