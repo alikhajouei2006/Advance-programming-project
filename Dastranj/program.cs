@@ -99,6 +99,15 @@ namespace FinalProj
                     FOREIGN KEY (OwnerId) REFERENCES Students(Id)
                 );";
 
+	    string repairrequestSql = @"
+		CREATE TABLE IF NOT EXISTS RepairRequests (
+		    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+		    PropertyNumber TEXT,
+		    EquipmentId INTEGER,
+		    FOREIGN KEY (EquipmentId) REFERENCES Equipment(Id)
+		);";
+
+
             using (var cmd = connection.CreateCommand())
             {
                 cmd.CommandText = dormitorySql; cmd.ExecuteNonQuery();
