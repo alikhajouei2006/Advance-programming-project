@@ -414,6 +414,8 @@ namespace FinalProj
     }
 
     internal static class Program {
+	    int MAX_ROOM_CAPACITY = 6;
+
 	    public static void registerNewEquipment() {
 		    Write("type of equipment: ");
 		    string type = ReadLine();
@@ -517,6 +519,20 @@ namespace FinalProj
 	    public static void showRepairingEquipment() {
 		    WriteLine("List of equipment that are being repaired: ");
 		    EquipmentManager.showEquipmentWithCondition(Condition.Repairing);
+	    }
+
+	    public static void showEmptyRooms() {
+		    List<Dictionary<string, object>> emptyRooms = Program.db.GetRecordsByField("Rooms", "Capacity", 0);
+		    foreach (Dictionary<string, object> room in emptyRooms) {
+			    WriteLine($"Room: {room["RoomNumber"]}, located in Floor: {room["FloorNumber"]}, in Block: {room["BlockId"]}");
+		    }
+	    }
+
+	    public static void showFullRooms() {
+		    List<Dictionary<string, object>> fullRooms = Program.db.GetRecordsByField("Rooms", "Capacity", MAX_ROOM_CAPACITY);
+		    foreach (Dictionary<string, object> room in fullRooms) {
+			    WriteLine($"Room: {room["RoomNumber"]}, located in Floor: {room["FloorNumber"]}, in Block: {room["BlockId"]}");
+		    }
 	    }
 
     }
