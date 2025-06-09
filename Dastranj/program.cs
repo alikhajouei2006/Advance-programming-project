@@ -447,24 +447,12 @@ namespace FinalProj
 		    EquipmentManager.exchangeEquipmentBetweenRooms(propertyNumber, destinationRoomId);
 	    }
 
-	    public static void changeStudentEquipment() {
-		    Write("Enter social number of the student whose equipment you want to change: ");
-		    string socialNumber = ReadLine();
-
-		    Write("enter property number of old equipment you want to change: ");
-		    string oldPropertyNumber = ReadLine();
-
+	    public static void changeStudentEquipment(string socialNumber, string oldPropertyNumber) { // the two parameters are for reusability
 		    Write("specify new equipment you want to assign to this student: ");
 		    Equipment equipment = chooseEquipment();
 		    string newPropertyNumber = equipment._propertyNumber;
 
 		    EquipmentManager.changeStudentEquipment(oldPropertyNumber, newPropertyNumber, socialNumber);
-	    }
-
-	    public static void requestEquipmentRepair() {
-		    Write("Enter Broken Equipment's property number: ");
-		    string propertyNumber = ReadLine();
-		    EquipmentManager.changeEquipmentCondition(propertyNumber, Condition.Broken);
 	    }
 
     }
