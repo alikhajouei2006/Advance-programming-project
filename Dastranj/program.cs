@@ -616,6 +616,12 @@ namespace FinalProj
 			    }
 		    }
 	    }
+
+	    public static void requestRepair() {
+		    Write("Enter property number of equipment that needs repairing: ");
+		    string propertyNumber = ReadLine();
+		    EquipmentManager.registerRepairReqest(propertyNumber);
+	    }
 	    
 	    public static void showAllRepairRequests() {
 		    List<Dictionary<string, object>> allRepairRequests = Program.db.GetAllRecords("RepairRequests");
