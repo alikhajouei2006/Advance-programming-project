@@ -384,6 +384,19 @@ namespace FinalProj
 			    WriteLine($"{equipment["Type"]}, property number: {equipment["PropertyNumber"]}, Condition: {equipment["Condition"]}");
 		    }
 	    }
+
+	    public static void equipmentAssignedToRoom(int RoomId) {
+		    List<Dictionary<string, object>> roomEquipment = Program.db.GetRecordsByField("Equipment", "RoomId", RoomId);
+		    foreach (Dictionary<string, object> equipment in roomEquipment) {
+			    if (equipment["OwnerId"] != DBNull.Value) {
+				    Dictionary<string, object> owner = Program.db.GetRecordsByField("Students", "Id", equipment["OwnerId"])[0];
+			    	    WriteLine($"{equipment["Type"]}, property number: {equipment["PropertyNumber"]}, Condition: {equipment["Condition"]}, Owned by: {owner["FullName"]}");
+			    }
+			    else {
+				    WriteLine($"{equipment["Type"]}, property number: {equipment["PropertyNumber"]}, Condition: {equipment["Condition"]}");
+			    }
+		    }
+	    }
     }
 
     internal static class Program {
@@ -462,6 +475,15 @@ namespace FinalProj
 		    string newPropertyNumber = equipment._propertyNumber;
 
 		    EquipmentManager.changeStudentEquipment(oldPropertyNumber, newPropertyNumber, socialNumber);
+	    }
+
+	    public static void showAssignedEquipmentToRooms() {
+		    List<Dictionary<string, object>> allRooms = Program.db.GetAllRecords("Rooms");
+		    foreach (Dictionary<string, obejct> room in allRooms) {
+			    WriteLine($"All equipment in Room :{room["RoomNumber"]}, located in Floor: {room["FloorNumber"]} in Block {room["BlockId"]}");
+			    EquipmentManager.equipmentAssignedToRoom(room["RoomId"].ToInt32());
+			    WriteLine("-----------------");
+		    }
 	    }
 
     }
