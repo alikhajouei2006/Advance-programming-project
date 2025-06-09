@@ -397,6 +397,13 @@ namespace FinalProj
 			    }
 		    }
 	    }
+
+	    public static void equipmentAssignedToStudent(int StudentId) {
+		    List<Dictionary<string, object>> studentEquipment = Program.db.GetRecordsByField("Equipment", "OwnerId", StudentId);
+		    foreach (Dictionary<string, object> equipment in studentEquipment) { 
+			    WriteLine($"{equipment["Type"]}, property number: {equipment["PropertyNumber"]}, Condition: {equipment["Condition"]}");
+		    }
+	    }
     }
 
     internal static class Program {
@@ -481,7 +488,16 @@ namespace FinalProj
 		    List<Dictionary<string, object>> allRooms = Program.db.GetAllRecords("Rooms");
 		    foreach (Dictionary<string, obejct> room in allRooms) {
 			    WriteLine($"All equipment in Room :{room["RoomNumber"]}, located in Floor: {room["FloorNumber"]} in Block {room["BlockId"]}");
-			    EquipmentManager.equipmentAssignedToRoom(room["RoomId"].ToInt32());
+			    EquipmentManager.equipmentAssignedToRoom(room["Id"].ToInt32());
+			    WriteLine("-----------------");
+		    }
+	    }
+
+	    public static void showAssignedEquipmentToStudents() {
+		    List<Dictionary<string, object>> allStudents = Program.db.GetAllRecords("Students");
+		    foreach (Dictionary<string, object> student in allStudents) {
+			    WriteLine($"All Equipment that belong to student {student["FullName"]}, in Room {student["RoomId"]}, in Block {student["BlockId"]}");
+			    EquipmentManager.equipmentAssignedToStudent(student["Id"].ToInt32());
 			    WriteLine("-----------------");
 		    }
 	    }
