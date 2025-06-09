@@ -103,6 +103,7 @@ namespace FinalProj
 		CREATE TABLE IF NOT EXISTS RepairRequests (
 		    Id INTEGER PRIMARY KEY AUTOINCREMENT,
 		    PropertyNumber TEXT,
+		    Status TEXT,
 		    EquipmentId INTEGER,
 		    FOREIGN KEY (EquipmentId) REFERENCES Equipment(Id)
 		);";
@@ -453,6 +454,17 @@ namespace FinalProj
 			    WriteLine($"{equipment["Type"]}, property number: {equipment["PropertyNumber"]}, in Room: {equipment["RoomId"]}");
 		    }
 	    }
+	    
+	    public static void registerRepairRequest(string propertyNumber) {
+		    RepairRequest req = new RepairRequest(propertyNumber);
+		    int equipmentId = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0]["Id"].ToInt32();
+
+		    Dictionary<string, object> reqDict = req.ToDictionary();
+		    reqDict.Add("EquipmentId", equipmentId);
+		    Program.db.InsertRecord("RepairRequests", reqDict);
+	    }
+
+
     }
 
     internal static class Program {
