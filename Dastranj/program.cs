@@ -78,14 +78,6 @@ namespace FinalProj
                     FOREIGN KEY (BlockId) REFERENCES Blocks(Id)
                 );";
 
-            string itemSql = @"
-                CREATE TABLE IF NOT EXISTS PersonalItems (
-                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    StudentId INTEGER NOT NULL,
-                    Item TEXT,
-                    FOREIGN KEY (StudentId) REFERENCES Students(Id)
-                );";
-
             string equipmentSql = @"
                 CREATE TABLE IF NOT EXISTS Equipment (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,6 +108,7 @@ namespace FinalProj
                 cmd.CommandText = studentSql; cmd.ExecuteNonQuery();
                 cmd.CommandText = itemSql; cmd.ExecuteNonQuery();
                 cmd.CommandText = equipmentSql; cmd.ExecuteNonQuery();
+		cmd.CommandText = repairrequestSql; cmd.ExecuteNonQuery();
             }
         }
     }
@@ -186,28 +179,53 @@ namespace FinalProj
 
     class Equipment
     {
+	protected static int _ItemCounter = 0;
+
         protected string _type;
         protected string _partNumber;
         protected string _propertyNumber;
         protected Condition _condition;
         protected int _RoomId;
+	protected int _BlockId;
+	protected int _DormId;
 
-        public Equipment(string type, string partNumber, string propertyNumber, Condition condition, int roomid)
+        public Equipment(string type, Condition condition, int roomid, int blockid, int dormid)
         {
             _type = type;
-            _partNumber = partNumber;
-            _propertyNumber = propertyNumber;
             _condition = condition;
             _RoomId = roomid;
+	    _BlockId = blockid;
+	    _DormId = dormid;
         }
-
-	public Equipment(string type, string partNumber, string propertyNumber, Condition condition) {
+        
+	public Equipment(string type, Condition condition, int blockid, int dormid) {
 		_type = type;
-		_partNumber = partNumber;
-		_propertyNumber = propertyNumber;
 		_condition = condition;
+		_BlockId = blockid;
+		_DormId = dormid;
 		_RoomId = null;
 	}
+	
+	public string _partNumber {
+		get => _partNumber;
+		set {
+			if (_type == "Fridge") _partNumber = "001";
+			else if (_type == "Desk") _partNumber = "002";
+			else if (_type == "Chair") _partNumber = "003";
+			else if (_type == "Bed") _partNumber = "004";
+			else if (_type == "Locker") _partNumber = "005";
+		}
+	}
+
+	public string _propertyNumber {
+		get => _propertyNumber;
+		set {
+			string counter = _ItemCounter.ToString();
+			_propertyNumber = $"{_DormId}{_BlockId}{_partNumber}{counter.PadLeft(3, '0')}";
+			_ItemCounter++;
+		}
+	}
+
 
 	public virtual Dictionary<string, object> ToDictionary() {
 		return new Dictionary<string, object> {
@@ -230,7 +248,7 @@ namespace FinalProj
     class PersonalEquipment : Equipment {
 	    private Student _owner;
 
-	    public PersonalEquipment(string type, string partNumber, string propertyNumber, Condition condition, Room room, Student owner):base(type, partNumber, propertyNumber, condition, room) {
+	    public PersonalEquipment(string type, Condition condition, string roomid, int blockid, int dormid, Student owner):base(type, condition, roomid, blockid, dormid) {
 		    _owner = owner;
 	    }
 
@@ -474,10 +492,12 @@ namespace FinalProj
 		    string type = ReadLine();
 		    Write("what condition is the equipment in: ");
 		    string condition = ReadLine();
-		    string partnumber;
-		    string propertynumber;
+		    Write("Enter Id of block in dormitory you want this equipment in: ");
+		    int blockid = int.Parse(ReadLine()); // replace this with a method called chooseBlock that works exactly like chooseRoom
+		    Write("Enter Id of dormitory you want this equipment in: ");
+		    int dormid = int.Parse(ReadLine()); // replace this with a method called chooseDormitory that works exactly like chooseRoom
 
-		    Equipment newEquipment = new Equipment(type, partnumber, propertynumber, condition);
+		    Equipment newEquipment = new Equipment(type, condition, blockid, dormid);
 		    EquipmentManager.addEquipmentToDB(newEquipment);
 	    }
 
