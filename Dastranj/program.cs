@@ -546,6 +546,23 @@ namespace FinalProj
 		    }
 	    }
 
+	    public static void showOverallAccommodationReport() {
+		    List<Dictionary<string, object>> allDorms = Program.db.GetAllRecords("Dormitories");
+		    foreach (Dictionary<string, object> dorm in allDorms) {
+			    List<Dictionary<string, object>> dormBlocks = Program.db.GetRecordsByField("Blocks", "DormitoryId", dorm["Id"].ToInt32());
+			    foreach (Dictionary<string, object> block in dormBlocks) {
+				    List<Dictionary<string, object>> blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", block["Id"].ToInt32());
+				    foreach (Dictionary<string, object> room in blockRooms) {
+					    List<Dictionary<string, object>> roomStudents = Program.db.GetRecordsByField("Students", "RoomId", room["Id"].ToInt32());
+					    foreach (Dictionary<string, object> student in roomStudents) {
+						    WriteLine($"Student: {student["FullName"].ToString()} with Student ID: {student["StudentID"]}, in Room: {room["Name"]}, in Block: {block["Name"]}, in Dormitory: {dorm["Name"]}");
+					    }
+					    WriteLine("-------------");
+				    }
+			    }
+		    }
+	    }
+
     }
 
 }
