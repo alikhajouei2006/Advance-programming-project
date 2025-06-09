@@ -404,6 +404,13 @@ namespace FinalProj
 			    WriteLine($"{equipment["Type"]}, property number: {equipment["PropertyNumber"]}, Condition: {equipment["Condition"]}");
 		    }
 	    }
+
+	    public static void showEquipmentWithCondition(Condition condition) {
+		    List<Dictionary<string, object>> allequipment = Program.db.GetRecordsByField("Equipment", "Condition", (string)condition);
+		    foreach (Dictionary<string, object> equipment in allEquipment) {
+			    WriteLine($"{equipment["Type"]}, property number: {equipment["PropertyNumber"]}, in Room: {equipment["RoomId"]}");
+		    }
+	    }
     }
 
     internal static class Program {
@@ -500,6 +507,16 @@ namespace FinalProj
 			    EquipmentManager.equipmentAssignedToStudent(student["Id"].ToInt32());
 			    WriteLine("-----------------");
 		    }
+	    }
+
+	    public static void showBrokenEquipment() {
+		    WriteLine("List of broken equipment: ");
+		    EquipmentManager.showEquipmentWithCondition(Condition.Broken);
+	    }
+
+	    public static void showRepairingEquipment() {
+		    WriteLine("List of equipment that are being repaired: ");
+		    EquipmentManager.showEquipmentWithCondition(Condition.Repairing);
 	    }
 
     }
