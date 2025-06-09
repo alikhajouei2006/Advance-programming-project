@@ -138,9 +138,9 @@ namespace FinalProj
 
     enum Condition : string
     {
-        Intact = "Works properly",
-        Broken = "Needs repairing",
-        Reparing = "Is being repaired",
+        Intact = "Intact",
+        Broken = "Broken",
+        Repairing = "Repairing",
     }
 
     class Equipment
@@ -346,17 +346,23 @@ namespace FinalProj
 		    Program.db.UpdateRecord("Equipment", ChangedRoomId, "PropertyNumber", propertyNumber);
 	    }
 
-	    public static void exchangeEquipmentBetweenStudents(string propertyNumber, string socialNumber) {
+	    public static void changeStudentEquipment(string oldPropertyNumber, string newPropertyNumber, string socialNumber) {
 		    Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
 		    var ownerId = studentDict["Id"];
 		    var roomId = studentDict["RoomId"];
 
-		    Dictionary<string, object> EquipmentUpdatedValues = Dictionary<string, object> {
+		    Dictionary<string, object> newEquipmentUpdatedValues = Dictionary<string, object> {
 			    {"RoomId", roomId},
 			    {"OwnerId", ownerId}
 		    };
 
-		    Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
+		    Dictionary<string, object> oldEquipmentUpdatedValues = Dictionary<string, object> {
+			    {"RoomId", DBNull},
+			    {"OwnerId", DBNull}
+		    };
+
+		    Program.db.UpdateRecord("Equipment", newEquipmentUpdatedValues, "PropertyNumber", newPropertyNumber);
+		    Program.db.UpdateRecord("Equipment", oldEquipmentUpdatedValues, "PropertyNumber", oldPropertyNumber);
 	    }
 
 	    public static void changeEquipmentCondition(string propertyNumber, Condition condition) {
@@ -441,15 +447,20 @@ namespace FinalProj
 		    EquipmentManager.exchangeEquipmentBetweenRooms(propertyNumber, destinationRoomId);
 	    }
 
-	    public static void exchangeEquipmentBetweenStudents() {
-		    Write("enter property number of equipment you want to exchange between students: ");
-		    string propertyNumber = ReadLine();
-
-		    Write("Enter social number of student you want to transfer the equipment to: ");
+	    public static void changeStudentEquipment() {
+		    Write("Enter social number of the student whose equipment you want to change: ");
 		    string socialNumber = ReadLine();
 
-		    EquipmentManager.exchangeEquipmentBetweenStudents(propertyNumber, socialNumber);
+		    Write("enter property number of old equipment you want to change: ");
+		    string oldPropertyNumber = ReadLine();
+
+		    Write("specify new equipment you want to assign to this student: ");
+		    Equipment equipment = chooseEquipment();
+		    string newPropertyNumber = equipment._propertyNumber;
+
+		    EquipmentManager.changeStudentEquipment(oldPropertyNumber, newPropertyNumber, socialNumber);
 	    }
+
 
     }
 
