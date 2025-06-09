@@ -103,9 +103,7 @@ namespace FinalProj
 		CREATE TABLE IF NOT EXISTS RepairRequests (
 		    Id INTEGER PRIMARY KEY AUTOINCREMENT,
 		    PropertyNumber TEXT,
-		    Status TEXT,
-		    EquipmentId INTEGER,
-		    FOREIGN KEY (EquipmentId) REFERENCES Equipment(Id)
+		    Status TEXT
 		);";
 
 
@@ -456,11 +454,12 @@ namespace FinalProj
 	    }
 	    
 	    public static void registerRepairRequest(string propertyNumber) {
+		    // uncomment the two below comments if you wish to add a field EquipmentId that is a foreign key to Id field in Equipment Table to RepairRequests table
 		    RepairRequest req = new RepairRequest(propertyNumber);
-		    int equipmentId = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0]["Id"].ToInt32();
+		    //int equipmentId = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0]["Id"].ToInt32();
 
 		    Dictionary<string, object> reqDict = req.ToDictionary();
-		    reqDict.Add("EquipmentId", equipmentId);
+		    //reqDict.Add("EquipmentId", equipmentId);
 		    Program.db.InsertRecord("RepairRequests", reqDict);
 	    }
 
@@ -626,7 +625,17 @@ namespace FinalProj
 	    public static void showAllRepairRequests() {
 		    List<Dictionary<string, object>> allRepairRequests = Program.db.GetAllRecords("RepairRequests");
 		    foreach (Dictionary<string, object> request in allRepairRequests) {
-			    WriteLine($"Request Number: {request["Id"]}, for Equipment with Property Number: {request["PropertyNumber"]}; Status: {request["Status"]}");
+			    Dictionary<string, object> equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", request["PropertyNumber"].ToInt32())[0];
+			    Dictionary<string, object> room = Program.db.GetRecordsByField("Rooms", "Id", equipment["RoomId"].ToInt32())[0];
+			    Dictionary<string, object> block = Program.db.GetRecordsByField("Blocks", "Id", room["BlockId"].ToInt32())[0];
+			    if (equipment["OwnerId"] != DBNull.Value) {
+			    	Dictionary<string, object> student = Program.db.GetRecordsByField("Students", "Id", equipment["OwnerId"].ToInt32())[0];
+				WriteLine($"Request Number: {request["Id"]}, for a(n) {equipment["Type"]}, with Property Number: {request["PropertyNumber"]}, in Room: {room["RoomNumber"]}, in Block: {block["Name"]}, Owned By Student: {student["FullName"]}, with Student ID: {student["StudentID"]}");
+
+			    }
+			    else {
+				WriteLine($"Request Number: {request["Id"]}, for a(n) {equipment["Type"]}, with Property Number: {request["PropertyNumber"]}, in Room: {room["RoomNumber"]}, in Block: {block["Name"]}");
+			    }
 		    }
 	    }
 
