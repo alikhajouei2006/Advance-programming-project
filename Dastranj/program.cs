@@ -373,8 +373,17 @@ namespace FinalProj
 		    Program.db.UpdateRecord("Equipment", UpdatedCondition, "PropertyNumber", propertyNumber);
 	    }
 
+	    public static Condition checkCondition(string propertyNumber) {
+		    Equipment equipment = Equipment.FromDictionary(Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0]);
+		    return (string)equipment._condition;
+	    }
 
-
+	    public static void showAllEquipment() {
+		    List<Dictionary<string, object>> allEquipment = Program.db.GetAllRecords("Equipment");
+		    foreach (Dictionary<string, object> equipemnt in allEquipment) {
+			    WriteLine($"{equipment["Type"]}, property number: {equipment["PropertyNumber"]}, Condition: {equipment["Condition"]}");
+		    }
+	    }
     }
 
     internal static class Program {
