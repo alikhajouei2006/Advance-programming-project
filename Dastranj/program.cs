@@ -461,6 +461,11 @@ namespace FinalProj
 		    EquipmentManager.changeStudentEquipment(oldPropertyNumber, newPropertyNumber, socialNumber);
 	    }
 
+	    public static void requestEquipmentRepair() {
+		    Write("Enter Broken Equipment's property number: ");
+		    string propertyNumber = ReadLine();
+		    EquipmentManager.changeEquipmentCondition(propertyNumber, Condition.Broken);
+	    }
 
     }
 
