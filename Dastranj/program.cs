@@ -535,6 +535,17 @@ namespace FinalProj
 		    }
 	    }
 
+	    public static void showBlockRemainingCapacity() {
+		    List<Dictionary<string, object>> allBlocks = Program.db.GetAllRecords("Blocks");
+		    foreach (Dictionary<string, object> block in allBlocks) {
+			    List<Dictionary<string, object>> blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", block["Id"].ToInt32());
+			    foreach(Dictionary<string, object> room in blockRooms) {
+				    int capacity = MAX_ROOM_CAPACITY - room["Capacity"].ToInt32();
+				    WriteLine($"Room: {room["RoomNumber"]}, in Block: {block["Name"]}, in Dormitory: {block["DormitoryId"]}, has {capacity} remaining space.");
+			    }
+		    }
+	    }
+
     }
 
 }
