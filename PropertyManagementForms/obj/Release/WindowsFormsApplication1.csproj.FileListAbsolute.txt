@@ -1,0 +1,15 @@
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\bin\Release\WindowsFormsApplication1.exe.config
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\obj\Release\WindowsFormsApplication1.brokenpropertyregistration.resources
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\obj\Release\WindowsFormsApplication1.propertymngmntmainpage.resources
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\obj\Release\WindowsFormsApplication1.assignpropertytostudent.resources
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\obj\Release\WindowsFormsApplication1.addproperty.resources
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\obj\Release\WindowsFormsApplication1.propertyassignment.resources
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\obj\Release\WindowsFormsApplication1.assignpropertytoroom.resources
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\obj\Release\WindowsFormsApplication1.propertyreplacement.resources
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\obj\Release\WindowsFormsApplication1.repairrequestregistration.resources
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\obj\Release\WindowsFormsApplication1.repairstatuscheck.resources
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\obj\Release\WindowsFormsApplication1.replacestudentproperty.resources
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\obj\Release\WindowsFormsApplication1.propertytransferrooms.resources
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\obj\Release\WindowsFormsApplication1.repairmngmnt.resources
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\obj\Release\WindowsFormsApplication1.Properties.Resources.resources
+C:\Users\moham\Desktop\ali's final project\WindowsFormsApplication1\obj\Release\WindowsFormsApplication1.csproj.GenerateResource.Cache

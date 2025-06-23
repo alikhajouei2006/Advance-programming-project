@@ -1,0 +1,189 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{C16DC89A-993F-46E1-AADA-850BF37C06D9}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>WindowsFormsApplication1</RootNamespace>
+    <AssemblyName>WindowsFormsApplication1</AssemblyName>
+    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Deployment" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="brokenpropertyregistration.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="brokenpropertyregistration.Designer.cs">
+      <DependentUpon>brokenpropertyregistration.cs</DependentUpon>
+    </Compile>
+    <Compile Include="propertymngmntmainpage.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="propertymngmntmainpage.Designer.cs">
+      <DependentUpon>propertymngmntmainpage.cs</DependentUpon>
+    </Compile>
+    <Compile Include="assignpropertytostudent.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="assignpropertytostudent.Designer.cs">
+      <DependentUpon>assignpropertytostudent.cs</DependentUpon>
+    </Compile>
+    <Compile Include="addproperty.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="addproperty.Designer.cs">
+      <DependentUpon>addproperty.cs</DependentUpon>
+    </Compile>
+    <Compile Include="propertyassignment.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="propertyassignment.Designer.cs">
+      <DependentUpon>propertyassignment.cs</DependentUpon>
+    </Compile>
+    <Compile Include="assignpropertytoroom.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="assignpropertytoroom.Designer.cs">
+      <DependentUpon>assignpropertytoroom.cs</DependentUpon>
+    </Compile>
+    <Compile Include="propertyreplacement.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="propertyreplacement.Designer.cs">
+      <DependentUpon>propertyreplacement.cs</DependentUpon>
+    </Compile>
+    <Compile Include="repairrequestregistration.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="repairrequestregistration.Designer.cs">
+      <DependentUpon>repairrequestregistration.cs</DependentUpon>
+    </Compile>
+    <Compile Include="repairstatuscheck.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="repairstatuscheck.Designer.cs">
+      <DependentUpon>repairstatuscheck.cs</DependentUpon>
+    </Compile>
+    <Compile Include="replacestudentproperty.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="replacestudentproperty.Designer.cs">
+      <DependentUpon>replacestudentproperty.cs</DependentUpon>
+    </Compile>
+    <Compile Include="propertytransferrooms.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="propertytransferrooms.Designer.cs">
+      <DependentUpon>propertytransferrooms.cs</DependentUpon>
+    </Compile>
+    <Compile Include="repairmngmnt.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="repairmngmnt.Designer.cs">
+      <DependentUpon>repairmngmnt.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Program.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <EmbeddedResource Include="brokenpropertyregistration.resx">
+      <DependentUpon>brokenpropertyregistration.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="propertymngmntmainpage.resx">
+      <DependentUpon>propertymngmntmainpage.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="assignpropertytostudent.resx">
+      <DependentUpon>assignpropertytostudent.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="addproperty.resx">
+      <DependentUpon>addproperty.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="propertyassignment.resx">
+      <DependentUpon>propertyassignment.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="assignpropertytoroom.resx">
+      <DependentUpon>assignpropertytoroom.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="propertyreplacement.resx">
+      <DependentUpon>propertyreplacement.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="repairrequestregistration.resx">
+      <DependentUpon>repairrequestregistration.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="repairstatuscheck.resx">
+      <DependentUpon>repairstatuscheck.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="replacestudentproperty.resx">
+      <DependentUpon>replacestudentproperty.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="propertytransferrooms.resx">
+      <DependentUpon>propertytransferrooms.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="repairmngmnt.resx">
+      <DependentUpon>repairmngmnt.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <None Include="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+    <Compile Include="Properties\Settings.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>
