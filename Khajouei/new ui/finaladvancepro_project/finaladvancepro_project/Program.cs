@@ -192,11 +192,9 @@ namespace Dormitory
             PhoneNumber TEXT NOT NULL,
             Address TEXT NOT NULL,
             StudentId INTEGER,
-            RoomId INTEGER,
             BlockId INTEGER,
             Role TEXT NOT NULL,
             FOREIGN KEY (StudentId) REFERENCES Students(Id),
-            FOREIGN KEY (RoomId) REFERENCES Rooms(Id),
             FOREIGN KEY (BlockId) REFERENCES Blocks(Id)
         );";
 
@@ -224,11 +222,13 @@ namespace Dormitory
             string studentSql = @"
             CREATE TABLE IF NOT EXISTS Students (
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                PersonId INTEGER NOT NULL,
+                FullName TEXT NOT NULL,
+                SocialNumber TEXT UNIQUE NOT NULL,
+                PhoneNumber TEXT NOT NULL,
+                Address TEXT NOT NULL,
                 StudentID TEXT,
                 RoomId INTEGER,
                 BlockId INTEGER,
-                FOREIGN KEY (PersonId) REFERENCES Persons(Id),
                 FOREIGN KEY (RoomId) REFERENCES Rooms(Id),
                 FOREIGN KEY (BlockId) REFERENCES Blocks(Id)
             );";
@@ -349,10 +349,17 @@ namespace Dormitory
 
                 AnsiConsole.Write(table);
 
-                AnsiConsole.MarkupLine("[yellow]Press Enter to return to the main menu...[/]");
+                
                 while (ReadKey(intercept: true).Key != ConsoleKey.Enter) { }
-                if(check)
+                if (check)
+                {
+                    AnsiConsole.MarkupLine("[yellow]Press Enter to return to the main menu...[/]");
                     ENUserInterFace.mainMenu();
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("[yellow]Press Enter to Contiue...[/]");
+                }
             }
             catch (Exception)
             {
@@ -1084,7 +1091,7 @@ namespace Dormitory
                 Program.db.InsertRecord("DormitorySupervisors", ToDictionary(dormiSupervisor));
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return false;
             }
@@ -1131,32 +1138,31 @@ namespace Dormitory
             }
             catch (Exception)
             {
-                ENUserInterFace.peoplemngmnt();
+                ENUserInterFace.sueprvisormngmnt();
             }
         }
     }
-    public class DormitoryBlockSupervisor
+    public class DormitoryBlockSupervisor : Person
     {
-        public Person PersonInfo { get; private set; }
-        public Student StudentInfo { get; private set; }
+
 
         public string Role { get; set; }
         public string BlockUnderResponsibility { get; set; }
+        public string Studentid { get; set; }
+        
 
-        public DormitoryBlockSupervisor(Person person, string role, string blockUnderResponsibility)
+        public DormitoryBlockSupervisor(string fullName, string socialNumber, string phoneNumber, string address, string role, string blockUnderResponsibility=null) : base(fullName, socialNumber, phoneNumber, address)
         {
-            PersonInfo = person;
-            StudentInfo = null;
+            Studentid = null;
             Role = role;
-            BlockUnderResponsibility = blockUnderResponsibility;
+            BlockUnderResponsibility = null;
         }
 
-        public DormitoryBlockSupervisor(Student student, string role, string blockUnderResponsibility)
+        public DormitoryBlockSupervisor(string fullName, string socialNumber, string phoneNumber, string address, string studentid , string role, string blockUnderResponsibility=null) : base(fullName, socialNumber, phoneNumber, address)
         {
-            StudentInfo = student;
-            PersonInfo = student;
+            Studentid = studentid;
             Role = role;
-            BlockUnderResponsibility = blockUnderResponsibility;
+            BlockUnderResponsibility = null;
         }
 
     }
@@ -1166,110 +1172,94 @@ namespace Dormitory
         {
             var values = new Dictionary<string, object>
             {
-                {"FullName", blocksupervisor.PersonInfo._fullName},
-                {"SocialNumber", blocksupervisor.PersonInfo._socialNumber},
-                {"PhoneNumber", blocksupervisor.PersonInfo._phoneNumber},
-                {"Address", blocksupervisor.PersonInfo._address},
-                {"StudentId", blocksupervisor.StudentInfo != null ? (object)blocksupervisor.StudentInfo._StudentID : DBNull.Value},
-                {"Room", blocksupervisor.StudentInfo != null ? (object)blocksupervisor.StudentInfo._RoomId : DBNull.Value},
-                {"Block", blocksupervisor.StudentInfo != null ? (object)blocksupervisor.StudentInfo._BlockId : DBNull.Value},
-                {"Role", blocksupervisor.Role},
-                {"BlockUnderResponsibility", blocksupervisor.BlockUnderResponsibility}
+                {"FullName", blocksupervisor._fullName},
+                {"SocialNumber", blocksupervisor._socialNumber},
+                {"PhoneNumber", blocksupervisor._phoneNumber},
+                {"Address", blocksupervisor._address},
+                {"StudentId",blocksupervisor.Studentid == null ? DBNull.Value : int.Parse(blocksupervisor.Studentid)},
+                {"BlockId", blocksupervisor.BlockUnderResponsibility},
+                {"Role", blocksupervisor.Role}
             };
             return values;
         }
-        public static void AddBlockSupervisor()
+        public static string AddBlockSupervisor(string FullName, string SocialNumber, string PhoneNumber, string Address, string role)
         {
-            DormitoryBlockSupervisor supervisor = Program.AddBlockSupervisor();
-            Program.db.InsertRecord("dormitoryBlockSupervisor", DormitoryBlockSupervisorManager.ToDictionary(supervisor));
-        }
-        public static void RemoveDormitoryBlockSupervisor()
-        {
-            string socialNumber = Program.RemoveBlockSupervisor();
-            Program.db.DeleteRecord("dormitoryBlockSupervisor", "socialNumber", socialNumber);
-        }
-        public static void UpdateDormitoryBlockSupervisor(string socialNumber)
-        {
-            if (Program.db.DoesSocialNumberExist("dormitoryBlockSupervisor", socialNumber))
+            try
             {
-
-                var dormiBlockSupervisorRecrod = Program.db.GetRecordsByField("DormitoryBlockSupervisor", "SocialNumber", socialNumber);
-                if (Program.db.DoesSocialNumberExist("students", socialNumber))
+                if (Program.db.DoesSocialNumberExist("Students", SocialNumber))
                 {
-                    Program.UpdateStudentInfo();
-                    var studentRecord = Program.db.GetRecordsByField("students", "SocialNumber", socialNumber);
-                    if (studentRecord[0]["BlockId"] != dormiBlockSupervisorRecrod[0]["BlockUnderResponsibility"])
+                    if (role.ToLower() == "studnet")
                     {
-                        throw new Exception();
+                        string studentid = Program.db.GetRecordsByField("Students", "SocialNumber", SocialNumber)[0]["Id"].ToString();
+                        DormitoryBlockSupervisor dormiblcksupervisor = new DormitoryBlockSupervisor(FullName, SocialNumber, PhoneNumber, Address, studentid, role);
+                        Program.db.InsertRecord("DormitoryBlockSupervisors", ToDictionary(dormiblcksupervisor));
+                        return "success";
                     }
                     else
                     {
-                        StudentManager.UpdateStudentInfoWithCurrentData(socialNumber);
+                        return "Student Exists But SocialNumber Is Not For a Student";
                     }
+
+                }
+                else if(role.ToLower() == "student")
+                {
+                    return "studentdosenotexist";
                 }
                 else
                 {
-                    WriteLine("شماره تلفن جدید را وارد کنید(خالی در صورت عدم تغییر) :");
-                    string newPhone = ReadLine();
-                    WriteLine("آدرس جدید را وارد کنید(خالی در صورت عدم تغییر) :");
-                    string newAddress = ReadLine();
-                    WriteLine("آیدی بلوک جدید را وارد کنید(خالی در صورت عدم تغییر) :");
-                    string newDormitoryBlock = ReadLine();
-                    WriteLine("سمت جدید(خالی در صورت عدم تغییر) :");
-                    string newPosition = ReadLine();
-                    if (newPhone == "" && newAddress == "" && newDormitoryBlock == "" && newPosition == "")
-                    {
-                        WriteLine("هیچ تغییری ایجاد نشد!");
-                        return;
-                    }
-                    var values = new Dictionary<string, object>
-                    {
-                        {"FullName",dormiBlockSupervisorRecrod[0]["FullName"] },
-                        {"SocialNumber",dormiBlockSupervisorRecrod[0]["SocialNumber"] },
-                        {"PhoneNumber",newPhone != null ? newPhone : dormiBlockSupervisorRecrod[0]["[PhoneNumber"] },
-                        {"Adress",newAddress != null ? newAddress : dormiBlockSupervisorRecrod[0]["Address"] },
-                        {"Position" , newPosition != null ? newPosition : dormiBlockSupervisorRecrod[0]["Position"]}
-                    };
-                    Program.db.UpdateRecord("dormitoryBlockSupervisor", values, "SocialNumber", socialNumber);
+                    DormitoryBlockSupervisor dormiblcksupervisor = new DormitoryBlockSupervisor(FullName, SocialNumber, PhoneNumber, Address, role);
+                    Program.db.InsertRecord("DormitoryBlockSupervisors", ToDictionary(dormiblcksupervisor));
+                    return "success";
                 }
-
             }
-            else
+            catch (Exception ex)
             {
-                throw new Exception();
+                return "unsucess";
             }
+        }
+        public static bool RemoveDormitoryBlockSupervisor(string socialNumber)
+        {
+            try
+            {
+                Program.db.DeleteRecord("dormitoryBlockSupervisor", "socialNumber", socialNumber);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+            
+        }
+        public static bool UpdateDormitoryBlockSupervisor(string socialNumber, string newPhoneNumber, string newAddress, string newrole)
+        {
+            try
+            {
+                var supervisorRecord = Program.db.GetRecordsByField("DormitorySupervisors", "SocialNuumber", socialNumber);
+                var supervisor = supervisorRecord[0];
+                string currentphonenumber = supervisor["PhoneNumber"].ToString();
+                string currentAddress = supervisor["Address"].ToString();
+                string currentPosition = supervisor["Position"].ToString();
+                var updateFields = new Dictionary<string, object>
+                {
+                    { "PhoneNumber", newPhoneNumber==null ? currentphonenumber : newPhoneNumber },
+                    { "Address", newAddress==null ? currentAddress : newAddress },
+                    { "Role", newrole==null ? currentPosition : newrole }
+                };
+                Program.db.UpdateRecord("DormitorySupervisors", updateFields, "SocialNumber", socialNumber);
+                return true;
+            }
+            catch (Exception)
+            { return false; }
         }
         public static void ShowAllBlockSupervisors()
         {
-            var supervisors = Program.db.GetAllRecords("dormitoryBlockSupervisor");
-
-            if (supervisors.Count == 0)
+            try
             {
-                WriteLine("هیچ مسئول بلوکی ثبت نشده است.");
-                return;
+                Program.db.ShowAllrecords("DormitoryBlockSupervisors");
             }
-
-            foreach (var sup in supervisors)
+            catch (Exception)
             {
-                WriteLine("-------------");
-                WriteLine($"نام و نام خانوادگی: {sup["FullName"]}");
-                WriteLine($"کد ملی: {sup["SocialNumber"]}");
-                WriteLine($"شماره تلفن: {sup["PhoneNumber"]}");
-                WriteLine($"آدرس: {sup["Address"]}");
-
-                if (sup["StudentId"] != DBNull.Value)
-                {
-                    WriteLine($"کد دانشجویی: {sup["StudentId"]}");
-                    WriteLine($"اتاق: {sup["Room"]}");
-                    WriteLine($"بلوک: {sup["Block"]}");
-                }
-                else
-                {
-                    WriteLine("این فرد دانشجو نیست.");
-                }
-
-                WriteLine($"سمت: {sup["Role"]}");
-                WriteLine($"بلوک تحت مسئولیت: {sup["BlockUnderResponsibility"]}");
+                ENUserInterFace.blocksupervisormngmnt();
             }
         }
     }
@@ -1751,6 +1741,7 @@ namespace Dormitory
                         sueprvisormngmnt();
                         break;
                     case "2. Manage Block supervisors":
+                        blocksupervisormngmnt();
                         break;
                     case "3. Managa Students":
                         break;
@@ -1838,8 +1829,8 @@ namespace Dormitory
                 {
                     "1. Register New Dormitory supervisor",
                     "2. Remove Existing Dormitory supervisor",
-                    "3. Edit Supervisor informatioans",
-                    "4. Show All Supervisors",
+                    "3. Edit Dormitory Supervisor informatioans",
+                    "4. Show All Dormitory Supervisors",
                     "5. Back to main menu"
                 }));
                 switch (choice)
@@ -1850,11 +1841,48 @@ namespace Dormitory
                     case "2. Remove Existing Dormitory supervisor":
                         Program.RemoveSupervisor();
                         break;
-                    case "3. Edit Supervisor informatioans":
+                    case "3. Edit Dormitory Supervisor informatioans":
                         Program.UpdateStudentInfo();
                         break;
-                    case "4. Show All Supervisors":
+                    case "4. Show All Dormitory Supervisors":
                         Program.ShowAllSupreVisor();
+                        break;
+                    case "5. Back to main menu":
+                        peoplemngmnt();
+                        break;
+
+                }
+                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+                ReadLine();
+            }
+        }
+
+        public static void blocksupervisormngmnt()
+        {
+            while (true)
+            {
+                Clear();
+                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Supervisor Management Menu[/]").PageSize(10).AddChoices(new[]
+                {
+                    "1. Register New Block supervisor",
+                    "2. Remove Existing Block supervisor",
+                    "3. Edit Block Supervisor informatioans",
+                    "4. Show All Block Supervisors",
+                    "5. Back to main menu"
+                }));
+                switch (choice)
+                {
+                    case "1. Register New Block supervisor":
+                        Program.AddBlockSupervisor();
+                        break;
+                    case "2. Remove Existing Block supervisor":
+                        Program.RemoveBlockSupervisor();
+                        break;
+                    case "3. Edit Block Supervisor informatioans":
+                        Program.UpdateBlockSupervisor();
+                        break;
+                    case "4. Show All Block Supervisors":
+                        Program.ShowBlockSupervisor();
                         break;
                     case "5. Back to main menu":
                         peoplemngmnt();
@@ -1974,13 +2002,13 @@ namespace Dormitory
                 bool doen = DormitorySuperVisorManager.AddSuperVisor(FullName, SocialNumber, PhoneNumber, Address, Position);
                 if (doen)
                 {
-                    AnsiConsole.MarkupLine("[green]DormitorySupervisor Created successflly.[/]");
+                    AnsiConsole.MarkupLine("[green]Dormitory Supervisor Created successflly .[/]");
                     Thread.Sleep(3000);
                     ENUserInterFace.mainMenu();
                 }
                 else
                 {
-                    AnsiConsole.MarkupLine("[red]Creating dormitorySupervisor failed, please try again .[/]");
+                    AnsiConsole.MarkupLine("[red]Creating dormitory Supervisor failed, please try again .[/]");
                     Thread.Sleep(3000);
                     ENUserInterFace.sueprvisormngmnt();
                 }
@@ -1995,20 +2023,20 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Remove DormitorySupervisor[/]");
+                AnsiConsole.MarkupLine("[blue]Remove Dormitory Supervisor[/]");
                 string socialnumber = AnsiConsole.Ask<string>("Enter the social number of supervisor you want to remove : ");
                 if (ENUserInterFace.checkback(socialnumber)) ENUserInterFace.sueprvisormngmnt();
 
                 var data = db.GetRecordsByField("DormitorySupervisors", "SocialNuumber", socialnumber);
                 if (data != null)
                 {
-                    var answ = AnsiConsole.Ask<string>($"An dormitorySupervisor with SocialNumber : {socialnumber} & Name : {data[0]["FullName"]} found , are sure to remove ? [Y/N] ");
+                    var answ = AnsiConsole.Ask<string>($"A dormitory Supervisor with SocialNumber : {socialnumber} & Name : {data[0]["FullName"]} found , are sure to remove ? [Y/N] ");
                     if (answ.ToLower() == "y")
                     {
                         bool done = DormitorySuperVisorManager.DeleteSpuervisor(socialnumber);
                         if (done)
                         {
-                            AnsiConsole.MarkupLine("[green]DormitorySuupervisor deleted successfully.[/]");
+                            AnsiConsole.MarkupLine("[green]Dormitory Suupervisor deleted successfully.[/]");
                             Thread.Sleep(3000);
                             ENUserInterFace.mainMenu();
                         }
@@ -2026,7 +2054,7 @@ namespace Dormitory
                 }
                 else
                 {
-                    AnsiConsole.MarkupLine($"[red]No such a dormitorySupervisor with SocialNumber : {socialnumber} ![/]");
+                    AnsiConsole.MarkupLine($"[red]No such a dormitory Supervisor with SocialNumber : {socialnumber} ![/]");
                     Thread.Sleep(3000);
                     RemoveSupervisor();
                 }
@@ -2092,60 +2120,147 @@ namespace Dormitory
             }
         }
         //dormitoryBlockSupervisor
-        public static DormitoryBlockSupervisor AddBlockSupervisor()
+        public static void AddBlockSupervisor()
         {
-            Person person = null;
-            Student student = null;
-            Write("نام کامل: ");
-            string FullName = ReadLine();
-            WriteLine("شماره ملی: ");
-            string SocialNumber = ReadLine();
-            WriteLine("شماره تماس: ");
-            string PhoneNumber = ReadLine();
-            WriteLine("آدرس: ");
-            string Address = ReadLine();
-            WriteLine("شماره دانشحویی (درصورت دانشجو نبودن خالی(:");
-            string StudentId = ReadLine();
-            //if student we should get more info from database
-            if (StudentId == null)
+            try
             {
-                WriteLine("سمت :");
-                string Position = ReadLine();
-                //show all block
-                WriteLine("ایدی بلوک :");
-                string Block = ReadLine();
-                person = new Person(FullName, SocialNumber, PhoneNumber, Address);
-                return new DormitoryBlockSupervisor(person, Position, Block);
+                AnsiConsole.MarkupLine("[blue]Register New Block Supervisor[/]");
+                string FullName = AnsiConsole.Ask<string>("Full Name : ");
+                if(ENUserInterFace.checkback(FullName)) ENUserInterFace.blocksupervisormngmnt();
+                string SocialNumber = AnsiConsole.Ask<string>("Social Number : ");
+                if (ENUserInterFace.checkback(SocialNumber)) ENUserInterFace.blocksupervisormngmnt();
+                string PhoneNumber = AnsiConsole.Ask<string>("Phone Number : ");
+                if (ENUserInterFace.checkback(PhoneNumber)) ENUserInterFace.blocksupervisormngmnt();
+                string Address = AnsiConsole.Ask<string>("Address : ");
+                if (ENUserInterFace.checkback(Address)) ENUserInterFace.blocksupervisormngmnt();
+                getrole:
+                    string role = AnsiConsole.Ask<string>("Role : (Can be Student) ");
+                    if (ENUserInterFace.checkback(role)) ENUserInterFace.blocksupervisormngmnt();
+                string done = DormitoryBlockSupervisorManager.AddBlockSupervisor(FullName, SocialNumber, PhoneNumber, Address, role);
+                if (done == "success")
+                {
+                    AnsiConsole.MarkupLine("[green]Dormitory Block Supervisor Created successflly .[/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.mainMenu();
+                }
+                else if(done == "Student Exists But SocialNumber Is Not For a Student" )
+                {
+                    AnsiConsole.MarkupLine("[red]Please enter role correctly .[/]");
+                    Thread.Sleep(3000);
+                    goto getrole;
+                }
+                else if(done == "unsucess")
+                {
+                    AnsiConsole.MarkupLine("[red]Creating dormitory Supervisor failed, please try again .[/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.blocksupervisormngmnt();
+                }
             }
-            else
+            catch(Exception)
             {
-                var StudentRecord = db.GetRecordsByField("stdents", "SocialNumber", SocialNumber);
-                string block = StudentRecord[0]["BlockId"].ToString();
-                string room = StudentRecord[0]["RoomId"].ToString();
-                string dormitory = StudentRecord[0]["DormitoryId"].ToString();
-                student = new Student(FullName, SocialNumber, PhoneNumber, Address, StudentId, room, block, dormitory);
-                return new DormitoryBlockSupervisor(student, "Student", block);
+                Thread.Sleep(3000);
+                ENUserInterFace.blocksupervisormngmnt();
             }
-
-
-
-
         }
-        public static string RemoveBlockSupervisor()
+        public static void RemoveBlockSupervisor()
         {
-            WriteLine("کد ملی مسئول را وارد کنید :");
-            string SocialNumber = ReadLine();
-            return SocialNumber;
+
+            try
+            {
+                AnsiConsole.MarkupLine("[blue]Remove Dormitory Block Supervisor[/]");
+                string socialnumber = AnsiConsole.Ask<string>("Enter the social number of supervisor you want to remove : ");
+                if (ENUserInterFace.checkback(socialnumber)) ENUserInterFace.blocksupervisormngmnt();
+
+                var data = db.GetRecordsByField("DormitoryBlockSupervisors", "SocialNuumber", socialnumber);
+                if (data != null)
+                {
+                    var answ = AnsiConsole.Ask<string>($"a dormitorySupervisor with SocialNumber : {socialnumber} & Name : {data[0]["FullName"]} found , are sure to remove ? [Y/N] ");
+                    if (answ.ToLower() == "y")
+                    {
+                        bool done = DormitoryBlockSupervisorManager.RemoveDormitoryBlockSupervisor(socialnumber);
+                        if (done)
+                        {
+                            AnsiConsole.MarkupLine("[green]Dormitory Block Suupervisor deleted successfully.[/]");
+                            Thread.Sleep(3000);
+                            ENUserInterFace.mainMenu();
+                        }
+                    }
+                    else if (answ.ToLower() == "n")
+                    {
+                        ENUserInterFace.blocksupervisormngmnt();
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine("[red]unkonwn command,please retry again... [/]");
+                        Thread.Sleep(3000);
+                        RemoveBlockSupervisor();
+                    }
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[red]No such a dormitory Block Supervisor with SocialNumber : {socialnumber} ![/]");
+                    Thread.Sleep(3000);
+                    RemoveBlockSupervisor();
+                }
+            }
+            catch (Exception)
+            {
+                Thread.Sleep(3000);
+                ENUserInterFace.blocksupervisormngmnt();
+            }
         }
         public static void UpdateBlockSupervisor()
         {
-            WriteLine("کد ملی مسئول را وارد کنید :");
-            string SocialNumber = ReadLine();
-            DormitoryBlockSupervisorManager.UpdateDormitoryBlockSupervisor(SocialNumber);
+            try
+            {
+                AnsiConsole.MarkupLine("[blue]Update Dormitory Block Supervisor infomations[/]");
+                string SoicalNumber = AnsiConsole.Ask<string>("Enter Dormitory Block Supervisor's SocialNumber : ");
+                if (ENUserInterFace.checkback(SoicalNumber)) ENUserInterFace.blocksupervisormngmnt();
+                var suprevisorRecord = Program.db.GetRecordsByField("DormitoryBlockSupervisors", "SocialNuumber", SoicalNumber);
+                if (suprevisorRecord == null || suprevisorRecord.Count == 0)
+                {
+                    AnsiConsole.MarkupLine($"[red]No such a dormitory Block Supervisor with SocialNumber : {SoicalNumber} ![/]");
+                    Thread.Sleep(3000);
+                    UpdateBlockSupervisor();
+                }
+                string newPhone = AnsiConsole.Ask<string>("Enter new Phone Number :(if you don't want to change it,leave it blank) ");
+                if (ENUserInterFace.checkback(newPhone)) ENUserInterFace.blocksupervisormngmnt();
+                var newAddress = AnsiConsole.Ask<string>("Enter new Address :(if you don't want to change it,leave it blank) ");
+                if (ENUserInterFace.checkback(newAddress)) ENUserInterFace.blocksupervisormngmnt();
+                string newrole = AnsiConsole.Ask<string>("Enter New Role :(if you don't want to change it,leave it blank) ");
+                if (ENUserInterFace.checkback(newrole)) ENUserInterFace.blocksupervisormngmnt();
+                bool done = DormitoryBlockSupervisorManager.UpdateDormitoryBlockSupervisor(SoicalNumber, newPhone, newAddress, newrole);
+                if (done)
+                {
+                    AnsiConsole.MarkupLine("[green]Informations updated successfully.[/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.mainMenu();
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("[red]Updating information failed, please try later [/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.blocksupervisormngmnt();
+                }
+            }
+            catch (Exception)
+            {
+                Thread.Sleep(3000);
+                ENUserInterFace.blocksupervisormngmnt();
+            }
         }
         public static void ShowBlockSupervisor()
         {
-            DormitoryBlockSupervisorManager.ShowAllBlockSupervisors();
+            try
+            {
+                AnsiConsole.MarkupLine("[blue]Show all Dormitory Block Supervisors[/]");
+                DormitoryBlockSupervisorManager.ShowAllBlockSupervisors();
+            }
+            catch (Exception)
+            {
+                Thread.Sleep(3000);
+                ENUserInterFace.blocksupervisormngmnt();
+            }
         }
         //director
         //public static bool Login(string username, string password)
