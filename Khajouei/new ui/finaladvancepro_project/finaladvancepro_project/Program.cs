@@ -928,14 +928,21 @@ namespace Dormitory
             }
         }
 
-        public static void assignEquipmentToRoom(string propertyNumber, string roomId)
+        public static bool assignEquipmentToRoom(string propertyNumber, string RoomId)
         {
-            var RoomId = Program.db.GetRecordsByField("Rooms", "RoomId", roomId)[0]["Id"]; // need implementation for Id in Room class and adding RoomId column to db
-            Dictionary<string, object> EquipmentUpdatedValues = new Dictionary<string, object>
-                {
-                { "RoomId", RoomId}
-            };
-            Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
+            try
+            {
+                Dictionary<string, object> EquipmentUpdatedValues = new Dictionary<string, object>
+                    {
+                    {"RoomId", RoomId}
+                };
+                Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         public static void assignEquipmentToStudent(string propertyNumber, string socialNumber)
@@ -1784,7 +1791,8 @@ namespace Dormitory
                     "3. Assign assets to Students",
                     "4. Manage asset transfers",
                     "5. Maintenance management",
-                    "6. Back to main menu"
+                    "6. List of all unassigned equipment",
+                    "7. Back to main menu"                    
                 }));
                 switch (choice)
                 {
@@ -1792,6 +1800,7 @@ namespace Dormitory
                         Program.RegisterNewEquipment();
                         break;
                     case "2. Assign Equipment to Rooms":
+                        Program.AssignEquipmentToRoom();
                         break;
                     case "3. Assign Equipment to Students":
                         break;
@@ -2219,6 +2228,40 @@ namespace Dormitory
                 ENUserInterFace.equipmentmngmnt();
             }
         }
+
+        public static void AssignEquipmentToRoom()
+        { 
+            try
+            {
+                AnsiConsole.MarkupLine("[blue]Rooms(remeber ID)[/]");
+                db.ShowAllrecords("Rooms",false);
+                AnsiConsole.MarkupLine("[blue]Add the Desired Equipment to Room[/]");
+                string roomid = AnsiConsole.Ask<string>("Chosen Room ID: ");
+                if (ENUserInterFace.checkback(roomid)) ENUserInterFace.equipmentmngmnt();
+                string propertynumber = AnsiConsole.Ask<string>("Property Number of Equipment: ");
+                if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.equipmentmngmnt();
+                bool done = EquipmentManager.assignEquipmentToRoom(propertynumber, roomid);
+                if (done)
+                {
+                    AnsiConsole.MarkupLine("[green]Equipment Assigned Successfully.[/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.mainMenu();
+                }
+                else
+                {
+                    AnsiConsole.Markup("[red]Assigning Equipment Failed, Please Try Again.");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.equipmentmngmnt();
+                }
+
+            }
+            catch (Exception)
+            {
+                Thread.Sleep(3000);
+                ENUserInterFace.blockmngmnt();
+            }
+        }            
+
         public static Room chooseRoom()
         {
             List<Dictionary<string, object>> allRooms = Program.db.GetAllRecords("Rooms");
@@ -2236,24 +2279,6 @@ namespace Dormitory
 
             Room specifiedRoom = Room.FromDictionary(specifiedRoomDict); // implementing FromDictionary method in Room class
             return specifiedRoom;
-        }
-        public static Equipment chooseEquipment()
-        {
-            WriteLine("Specify the type of equipment you want: ");
-            string type = ReadLine();
-            List<Dictionary<string, object>> allEquipment = Program.db.GetRecordsByField("Equipment", "RoomId", DBNull.Value); // needs to be changed to select all equipment that are not assigned to any room and are of specified type and intact
-            WriteLine("not assigned equipment: ");
-            for (int i = 0; i < allEquipment.Count; i++)
-            {
-                Dictionary<string, object> equipment = allEquipment[i];
-                WriteLine($"Equipment {i}: property number: {equipment["PropertyNumber"]}, Type: {equipment["Type"]} ");
-            }
-            Write("Specify an equipment from the above list: ");
-            int equipmentIndex = int.Parse(ReadLine());
-            Dictionary<string, object> specifiedEquipmentDict = allEquipment[equipmentIndex];
-
-            Equipment specifiedEquipment = Equipment.FromDictionary(specifiedEquipmentDict);
-            return specifiedEquipment;
         }
         public static void assignEquipmentToRoom()
         {
