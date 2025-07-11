@@ -1011,14 +1011,21 @@ namespace Dormitory
             }
         }
 
-        public static void changeEquipmentCondition(string propertyNumber, Condition condition)
+        public static bool changeEquipmentCondition(string propertyNumber, Condition condition)
         {
-            Dictionary<string, object> UpdatedCondition = new Dictionary<string, object> {
-                { "Condition", condition.ToString()}
-            }
-            ;
+            try
+            {
+                Dictionary<string, object> UpdatedCondition = new Dictionary<string, object> {
+                    { "Condition", condition.ToString()}
+                };
 
-            Program.db.UpdateRecord("Equipment", UpdatedCondition, "PropertyNumber", propertyNumber);
+                Program.db.UpdateRecord("Equipment", UpdatedCondition, "PropertyNumber", propertyNumber);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         public static Condition checkCondition(string propertyNumber)
@@ -1072,6 +1079,12 @@ namespace Dormitory
 
                 Dictionary<string, object> reqDict = req.ToDictionary();
                 //reqDict.Add("EquipmentId", equipmentId);
+                bool status = changeEquipmentCondition(propertyNumber, Condition.Repairing);
+                if (!status)
+                {
+                    return false;
+                }
+
                 Program.db.InsertRecord("RepairRequests", reqDict);
                 return true;
             }
@@ -1817,6 +1830,7 @@ namespace Dormitory
                         Program.CheckRepairStatus();
                         break;
                     case "3. Set Equipment Condition as Broken":
+                        Program.SetEquipmentConditionAsBroken();
                         break;
                     case "4. Back to Previous Menu":
                         equipmentmngmnt();
@@ -2533,6 +2547,35 @@ namespace Dormitory
             catch (Exception)
             {
                 AnsiConsole.Markup("[red]Checking Repair Status of Equipment Failed, Please Try Again.");
+                Thread.Sleep(3000);
+                ENUserInterFace.maintenancemngmnt();
+            }
+        }
+
+        public static void SetEquipmentConditionAsBroken()
+        { 
+            try
+            {
+                AnsiConsole.MarkupLine("[blue]Chaning Condition of Equipment to Broken[/]");
+                string propertynumber = AnsiConsole.Ask<string>("Enter Property Number of Broken Equipment: ");
+                if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.maintenancemngmnt();
+                bool done = EquipmentManager.changeEquipmentCondition(propertynumber, Condition.Broken);
+                if (done)
+                {
+                    AnsiConsole.MarkupLine("[green]Equipment's Condition Successfully Changed to Broken.[/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.maintenancemngmnt();
+                }
+                else
+                {
+                    AnsiConsole.Markup("[red]Changing Condition of Equipment to Broken Failed, Please Try Again.");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.maintenancemngmnt();
+                }
+
+            }
+            catch (Exception)
+            {
                 Thread.Sleep(3000);
                 ENUserInterFace.maintenancemngmnt();
             }
