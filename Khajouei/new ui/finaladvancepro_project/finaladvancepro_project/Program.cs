@@ -983,26 +983,32 @@ namespace Dormitory
             }
         }
 
-        public static void changeStudentEquipment(string oldPropertyNumber, string newPropertyNumber, string socialNumber)
+        public static bool changeStudentEquipment(string oldPropertyNumber, string newPropertyNumber, string socialNumber)
         {
-            Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
-            var ownerId = studentDict["Id"];
-            var roomId = studentDict["RoomId"];
+            try
+            {
+                Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
+                var ownerId = studentDict["Id"];
+                var roomId = studentDict["RoomId"];
 
-            Dictionary<string, object> newEquipmentUpdatedValues = new Dictionary<string, object> {
-                { "RoomId", roomId},
-                { "OwnerId", ownerId}
+                Dictionary<string, object> newEquipmentUpdatedValues = new Dictionary<string, object> {
+                    { "RoomId", roomId},
+                    { "OwnerId", ownerId}
+                };
+
+                Dictionary<string, object> oldEquipmentUpdatedValues = new Dictionary<string, object> {
+                    { "RoomId", DBNull.Value},
+                    { "OwnerId", DBNull.Value}
+                };
+
+                Program.db.UpdateRecord("Equipment", newEquipmentUpdatedValues, "PropertyNumber", newPropertyNumber);
+                Program.db.UpdateRecord("Equipment", oldEquipmentUpdatedValues, "PropertyNumber", oldPropertyNumber);
+                return true;
             }
-            ;
-
-            Dictionary<string, object> oldEquipmentUpdatedValues = new Dictionary<string, object> {
-                { "RoomId", DBNull.Value},
-                { "OwnerId", DBNull.Value}
+            catch (Exception)
+            {
+                return false;
             }
-            ;
-
-            Program.db.UpdateRecord("Equipment", newEquipmentUpdatedValues, "PropertyNumber", newPropertyNumber);
-            Program.db.UpdateRecord("Equipment", oldEquipmentUpdatedValues, "PropertyNumber", oldPropertyNumber);
         }
 
         public static void changeEquipmentCondition(string propertyNumber, Condition condition)
@@ -1783,6 +1789,36 @@ namespace Dormitory
             }
         }
 
+        public static void maintenancemngmnt()
+        { 
+            while (true)
+            {
+                Clear();
+                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Maintenance Management Menu[/]").PageSize(10).AddChoices(new[]
+                {
+                    "1. ",
+                    "2. ",
+                    "3. ",
+                    "4. Back to main menu"
+                }));
+                switch (choice)
+                {
+                    case "1. Manage Dormitory supervisors":
+                        break;
+                    case "2. Manage Block supervisors":
+                        break;
+                    case "3. Managa Students":
+                        break;
+                    case "4. Back to main menu":
+                        mainMenu();
+                        break;
+
+                }
+                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+                ReadLine();
+            }            
+        }
+
         public static void equipmentmngmnt()
         {
             while (true)
@@ -1796,7 +1832,7 @@ namespace Dormitory
                     "4. Exchange equipment between rooms",
                     "5. Change student's equipment",
                     "6. Maintenance management",
-                    "7. Back to main menu"                    
+                    "7. Back to main menu"
                 }));
                 switch (choice)
                 {
@@ -1813,6 +1849,7 @@ namespace Dormitory
                         Program.ExchangeEquipmentBetweenRooms();
                         break;
                     case "5. Change student's equipment":
+                        Program.ChangeStudentEquipment();
                         break;
                     case "6. Maintenance management":
                         break;
@@ -2253,7 +2290,7 @@ namespace Dormitory
                 {
                     AnsiConsole.MarkupLine("[green]Equipment Assigned Successfully.[/]");
                     Thread.Sleep(3000);
-                    ENUserInterFace.mainMenu();
+                    ENUserInterFace.equipmentmngmnt();
                 }
                 else
                 {
@@ -2284,7 +2321,7 @@ namespace Dormitory
                 {
                     AnsiConsole.MarkupLine("[green]Equipment Assigned Successfully.[/]");
                     Thread.Sleep(3000);
-                    ENUserInterFace.mainMenu();
+                    ENUserInterFace.equipmentmngmnt();
                 }
                 else
                 {
@@ -2317,7 +2354,7 @@ namespace Dormitory
                 {
                     AnsiConsole.MarkupLine("[green]Equipment Moved Successfully.[/]");
                     Thread.Sleep(3000);
-                    ENUserInterFace.mainMenu();
+                    ENUserInterFace.equipmentmngmnt();
                 }
                 else
                 {
@@ -2333,13 +2370,38 @@ namespace Dormitory
                 ENUserInterFace.equipmentmngmnt();
             }
         }
-        public static void changeStudentEquipment(string socialNumber, string oldPropertyNumber)
-        { // the two parameters are for reusability
-            Write("specify new equipment you want to assign to this student: ");
-            Equipment equipment = chooseEquipment();
-            string newPropertyNumber = equipment._propertyNumber;
+        public static void ChangeStudentEquipment()
+        {
+            try
+            {
+                AnsiConsole.MarkupLine("[blue]Change Student's Equipment[/]");
+                string socialid = AnsiConsole.Ask<string>("Enter Student's ID: ");
+                if (ENUserInterFace.checkback(socialid)) ENUserInterFace.equipmentmngmnt();
+                string oldpropertynumber = AnsiConsole.Ask<string>("Property Number of The Current Equipment: ");
+                if (ENUserInterFace.checkback(oldpropertynumber)) ENUserInterFace.equipmentmngmnt();
+                string newpropertynumber = AnsiConsole.Ask<string>("Property Number of Equipment to Replace With The Current Equipment: ");
+                if (ENUserInterFace.checkback(newpropertynumber)) ENUserInterFace.equipmentmngmnt();                
+                bool done = EquipmentManager.changeStudentEquipment(oldpropertynumber, newpropertynumber, socialid);
+                if (done)
+                {
+                    AnsiConsole.MarkupLine("[green]Student's Equipment Changed Successfully.[/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.equipmentmngmnt();
+                }
+                else
+                {
+                    AnsiConsole.Markup("[red]Changing Equipment Failed, Please Try Again.");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.equipmentmngmnt();
+                }
 
-            EquipmentManager.changeStudentEquipment(oldPropertyNumber, newPropertyNumber, socialNumber);
+            }
+            catch (Exception)
+            {
+                Thread.Sleep(3000);
+                ENUserInterFace.equipmentmngmnt();
+            }            
+
         }
         public static void showAssignedEquipmentToRooms()
         {
