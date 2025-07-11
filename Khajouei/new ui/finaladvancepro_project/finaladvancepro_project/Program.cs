@@ -1062,15 +1062,23 @@ namespace Dormitory
             }
         }
 
-        public static void registerRepairRequest(string propertyNumber)
+        public static bool registerRepairRequest(string propertyNumber)
         {
-            // uncomment the two below comments if you wish to add a field EquipmentId that is a foreign key to Id field in Equipment Table to RepairRequests table
-            RepairRequest req = new RepairRequest(propertyNumber);
-            //int equipmentId = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0]["Id"].ToInt32();
+            try
+            {
+                // uncomment the two below comments if you wish to add a field EquipmentId that is a foreign key to Id field in Equipment Table to RepairRequests table
+                RepairRequest req = new RepairRequest(propertyNumber);
+                //int equipmentId = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0]["Id"].ToInt32();
 
-            Dictionary<string, object> reqDict = req.ToDictionary();
-            //reqDict.Add("EquipmentId", equipmentId);
-            Program.db.InsertRecord("RepairRequests", reqDict);
+                Dictionary<string, object> reqDict = req.ToDictionary();
+                //reqDict.Add("EquipmentId", equipmentId);
+                Program.db.InsertRecord("RepairRequests", reqDict);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
 
@@ -1796,21 +1804,22 @@ namespace Dormitory
                 Clear();
                 var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Maintenance Management Menu[/]").PageSize(10).AddChoices(new[]
                 {
-                    "1. ",
-                    "2. ",
-                    "3. ",
-                    "4. Back to main menu"
+                    "1. Request Repair of Equipment",
+                    "2. Check Status of Equipment Under Repairing",
+                    "3. Set Equipment Condition as Broken",
+                    "4. Back to Previous Menu"
                 }));
                 switch (choice)
                 {
-                    case "1. Manage Dormitory supervisors":
+                    case "1. Request Repair of Equipment":
+                        Program.RequestRepair();
                         break;
-                    case "2. Manage Block supervisors":
+                    case "2. Check Status of Equipment Under Repairing":
                         break;
-                    case "3. Managa Students":
+                    case "3. Set Equipment Condition as Broken":
                         break;
-                    case "4. Back to main menu":
-                        mainMenu();
+                    case "4. Back to Previous Menu":
+                        equipmentmngmnt();
                         break;
 
                 }
@@ -1852,6 +1861,7 @@ namespace Dormitory
                         Program.ChangeStudentEquipment();
                         break;
                     case "6. Maintenance management":
+                        maintenancemngmnt();
                         break;
                     case "7. Back to main menu":
                         mainMenu();
@@ -2400,8 +2410,7 @@ namespace Dormitory
             {
                 Thread.Sleep(3000);
                 ENUserInterFace.equipmentmngmnt();
-            }            
-
+            }
         }
         public static void showAssignedEquipmentToRooms()
         {
@@ -2483,11 +2492,33 @@ namespace Dormitory
                 }
             }
         }
-        public static void requestRepair()
+        public static void RequestRepair()
         {
-            Write("Enter property number of equipment that needs repairing: ");
-            string propertyNumber = ReadLine();
-            EquipmentManager.registerRepairRequest(propertyNumber);
+            try
+            {
+                AnsiConsole.MarkupLine("[blue]Request Repair of an Equipment[/]");
+                string propertynumber = AnsiConsole.Ask<string>("Enter Property Number of Broken Equipment: ");
+                if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.maintenancemngmnt();
+                bool done = EquipmentManager.registerRepairRequest(propertynumber);
+                if (done)
+                {
+                    AnsiConsole.MarkupLine("[green]Request for Repair of Equipment Registered Successfully.[/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.maintenancemngmnt();
+                }
+                else
+                {
+                    AnsiConsole.Markup("[red]Registering Repair Request for Equipment Failed, Please Try Again.");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.maintenancemngmnt();
+                }
+
+            }
+            catch (Exception)
+            {
+                Thread.Sleep(3000);
+                ENUserInterFace.maintenancemngmnt();
+            }            
         }
         public static void showAllRepairRequests()
         {
