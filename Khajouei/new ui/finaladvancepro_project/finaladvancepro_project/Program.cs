@@ -1,4 +1,4 @@
-﻿using System;
+	﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -1079,8 +1079,8 @@ namespace Dormitory
 
                 Dictionary<string, object> reqDict = req.ToDictionary();
                 //reqDict.Add("EquipmentId", equipmentId);
-                bool status = changeEquipmentCondition(propertyNumber, Condition.Repairing);
-                if (!status)
+                bool done = changeEquipmentCondition(propertyNumber, Condition.Repairing);
+                if (!done)
                 {
                     return false;
                 }
@@ -2302,9 +2302,9 @@ namespace Dormitory
         { 
             try
             {
+                AnsiConsole.MarkupLine("[blue]Add the Desired Equipment to Room[/]");
                 AnsiConsole.MarkupLine("[blue]Rooms(remeber ID)[/]");
                 db.ShowAllrecords("Rooms",false);
-                AnsiConsole.MarkupLine("[blue]Add the Desired Equipment to Room[/]");
                 string roomid = AnsiConsole.Ask<string>("Chosen Room ID: ");
                 if (ENUserInterFace.checkback(roomid)) ENUserInterFace.equipmentmngmnt();
                 string propertynumber = AnsiConsole.Ask<string>("Property Number of Equipment: ");
@@ -2366,9 +2366,9 @@ namespace Dormitory
         {
             try
             {
+                AnsiConsole.MarkupLine("[blue]Move the Desired Equipment to Another Room[/]");            
                 AnsiConsole.MarkupLine("[blue]Rooms(remeber ID)[/]");
                 db.ShowAllrecords("Rooms",false);
-                AnsiConsole.MarkupLine("[blue]Move the Desired Equipment to Another Room[/]");
                 string roomid = AnsiConsole.Ask<string>("Enter Destination Room's ID: ");
                 if (ENUserInterFace.checkback(roomid)) ENUserInterFace.equipmentmngmnt();
                 string propertynumber = AnsiConsole.Ask<string>("Property Number of Equipment: ");
@@ -2399,7 +2399,7 @@ namespace Dormitory
             try
             {
                 AnsiConsole.MarkupLine("[blue]Change Student's Equipment[/]");
-                string socialid = AnsiConsole.Ask<string>("Enter Student's ID: ");
+                string socialid = AnsiConsole.Ask<string>("Enter Student's Social ID: ");
                 if (ENUserInterFace.checkback(socialid)) ENUserInterFace.equipmentmngmnt();
                 string oldpropertynumber = AnsiConsole.Ask<string>("Property Number of The Current Equipment: ");
                 if (ENUserInterFace.checkback(oldpropertynumber)) ENUserInterFace.equipmentmngmnt();
@@ -2546,7 +2546,7 @@ namespace Dormitory
             }
             catch (Exception)
             {
-                AnsiConsole.Markup("[red]Checking Repair Status of Equipment Failed, Please Try Again.");
+                AnsiConsole.Markup("[red]Checking Status of Repairing Equipment Failed, Please Try Again.");
                 Thread.Sleep(3000);
                 ENUserInterFace.maintenancemngmnt();
             }
@@ -2556,7 +2556,7 @@ namespace Dormitory
         { 
             try
             {
-                AnsiConsole.MarkupLine("[blue]Chaning Condition of Equipment to Broken[/]");
+                AnsiConsole.MarkupLine("[blue]Changing Condition of Equipment to Broken[/]");
                 string propertynumber = AnsiConsole.Ask<string>("Enter Property Number of Broken Equipment: ");
                 if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.maintenancemngmnt();
                 bool done = EquipmentManager.changeEquipmentCondition(propertynumber, Condition.Broken);
