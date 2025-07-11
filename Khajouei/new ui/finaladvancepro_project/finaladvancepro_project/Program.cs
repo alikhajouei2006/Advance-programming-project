@@ -945,17 +945,25 @@ namespace Dormitory
             }
         }
 
-        public static void assignEquipmentToStudent(string propertyNumber, string socialNumber)
+        public static bool assignEquipmentToStudent(string propertyNumber, string socialNumber)
         {
-            Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
-            var StudentId = studentDict["Id"];
-            var RoomId = studentDict["RoomId"];
-            Dictionary<string, object> EquipmentUpdatedValues = new Dictionary<string, object> {
-                { "RoomId", RoomId},
-                { "OwnerId", StudentId}
+            try
+            {
+
+                Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
+                var StudentId = studentDict["Id"];
+                var RoomId = studentDict["RoomId"];
+                Dictionary<string, object> EquipmentUpdatedValues = new Dictionary<string, object> {
+                    { "RoomId", RoomId },
+                    { "OwnerId", StudentId }
+                };
+                Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
+                return true;
             }
-            ;
-            Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         public static bool exchangeEquipmentBetweenRooms(string propertyNumber, string roomId)
@@ -1799,6 +1807,7 @@ namespace Dormitory
                         Program.AssignEquipmentToRoom();
                         break;
                     case "3. Assign equipment to Students":
+                        Program.AssignEquipmentToStudent();
                         break;
                     case "4. Exchange equipment between rooms":
                         Program.ExchangeEquipmentBetweenRooms();
@@ -2266,11 +2275,11 @@ namespace Dormitory
             try
             {
                 AnsiConsole.MarkupLine("[blue]Add the Desired Equipment to Student's Equipment[/]");
-                string studentId = AnsiConsole.Ask<string>("Enter Student's ID: ");
-                if (ENUserInterFace.checkback(roomid)) ENUserInterFace.equipmentmngmnt();
+                string socialid = AnsiConsole.Ask<string>("Enter Student's Social ID: ");
+                if (ENUserInterFace.checkback(socialid)) ENUserInterFace.equipmentmngmnt();
                 string propertynumber = AnsiConsole.Ask<string>("Property Number of Equipment: ");
                 if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.equipmentmngmnt();
-                bool done = EquipmentManager.assignEquipmentToStudent(propertynumber, studentId);
+                bool done = EquipmentManager.assignEquipmentToStudent(propertynumber, socialid);
                 if (done)
                 {
                     AnsiConsole.MarkupLine("[green]Equipment Assigned Successfully.[/]");
