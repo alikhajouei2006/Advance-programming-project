@@ -1081,7 +1081,6 @@ namespace Dormitory
             }
         }
 
-
     }
     public class DormitorySupervisor : Person
     {
@@ -1815,6 +1814,7 @@ namespace Dormitory
                         Program.RequestRepair();
                         break;
                     case "2. Check Status of Equipment Under Repairing":
+                        Program.CheckRepairStatus();
                         break;
                     case "3. Set Equipment Condition as Broken":
                         break;
@@ -2518,8 +2518,26 @@ namespace Dormitory
             {
                 Thread.Sleep(3000);
                 ENUserInterFace.maintenancemngmnt();
-            }            
+            }
         }
+
+        public static void CheckRepairStatus()
+        { 
+            try
+            {
+                AnsiConsole.MarkupLine("[blue]Checking Repair Request of an Equipment[/]");
+                string propertynumber = AnsiConsole.Ask<string>("Enter Property Number of The Equipment Being Repaired: ");
+                if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.maintenancemngmnt();
+                DatabaseManager.ShowRecordsByField("RepairRequests", "PropertyNumber", propertynumber);
+            }
+            catch (Exception)
+            {
+                AnsiConsole.Markup("[red]Checking Repair Status of Equipment Failed, Please Try Again.");
+                Thread.Sleep(3000);
+                ENUserInterFace.maintenancemngmnt();
+            }
+        }
+
         public static void showAllRepairRequests()
         {
             List<Dictionary<string, object>> allRepairRequests = Program.db.GetAllRecords("RepairRequests");
