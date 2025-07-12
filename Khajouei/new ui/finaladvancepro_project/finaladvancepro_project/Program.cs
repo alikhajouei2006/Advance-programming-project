@@ -54,7 +54,14 @@ namespace Dormitory
                 {
                     foreach (var kvp in values)
                     {
-                        command.Parameters.AddWithValue("@" + kvp.Key, kvp.Value ?? DBNull.Value);
+                        if (kvp.Value == null || kvp.Value == DBNull.Value)
+                        {
+                            command.Parameters.Add(new SqliteParameter("@" + kvp.Key, System.Data.DbType.Object) { Value = DBNull.Value });
+                        }
+                        else
+                        {
+                            command.Parameters.AddWithValue("@" + kvp.Key, kvp.Value);
+                        }
                     }
                     command.ExecuteNonQuery();
                 }
@@ -224,13 +231,15 @@ namespace Dormitory
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 FullName TEXT NOT NULL,
                 SocialNumber TEXT UNIQUE NOT NULL,
-                PhoneNumber TEXT NOT NULL,
+                PhoneNumber TEXT UNIQUE NOT NULL,
                 Address TEXT NOT NULL,
                 StudentID TEXT,
                 RoomId INTEGER,
                 BlockId INTEGER,
+                DormitoryId INTEGER,
                 FOREIGN KEY (RoomId) REFERENCES Rooms(Id) ON DELETE SET NULL,
-                FOREIGN KEY (BlockId) REFERENCES Blocks(Id) ON DELETE SET NULL
+                FOREIGN KEY (BlockId) REFERENCES Blocks(Id) ON DELETE SET NULL,
+                FOREIGN KEY (DormitoryId) REFERENCES Dormitories(Id) ON DELETE SET NULL
             );";
 
             string directorSql = @"
@@ -390,14 +399,14 @@ namespace Dormitory
         public string _BlockId { get; set; }
         public string _DormitoryId { get; set; }
         protected List<string> _PersonalItems { get; set; }
-        public Student(string fullName, string socialNumber, string phoneNumber, string address, string studentID, string roomId, string blockId, string dormitoryId, List<string> personalItems = null)
+        public Student(string fullName, string socialNumber, string phoneNumber, string address, string studentID, string roomId=null, string blockId=null, string dormitoryId = null, List<string> personalItems = null)
             : base(fullName, socialNumber, phoneNumber, address)
         {
             _StudentID = studentID;
-            _RoomId = roomId;
-            _BlockId = blockId;
-            _DormitoryId = dormitoryId;
-            _PersonalItems = personalItems ?? new List<string>();
+            _RoomId = null;
+            _BlockId = null;
+            _DormitoryId = null;
+            _PersonalItems = null;
         }
 
     }
@@ -409,77 +418,94 @@ namespace Dormitory
         }
         private static Dictionary<string, object> ToDictionary(Student student)
         {
-            Dictionary<string, object> info = new Dictionary<string, object>
+            var info = new Dictionary<string, object>
+    {
+        {"FullName", student._fullName},
+        {"SocialNumber", student._socialNumber},
+        {"StudentId", student._StudentID},
+        {"PhoneNumber", student._phoneNumber},
+        {"Address", student._address},
+        {"RoomId", string.IsNullOrEmpty(student._RoomId) ? DBNull.Value : student._RoomId},
+        {"BlockId", string.IsNullOrEmpty(student._BlockId) ? DBNull.Value : student._BlockId},
+        {"DormitoryId", DBNull.Value}
+    };
+
+            if (!string.IsNullOrEmpty(student._BlockId))
             {
-                {"FullName",student._fullName},
-                {"SocialNumber",student._socialNumber},
-                {"StudentId" , student._StudentID},
-                {"PhoneNumber",student._phoneNumber},
-                {"Address",student._address},
-                {"RoomId" ,student._RoomId},
-                {"BlockId",student._BlockId},
-                {"DormitoryId" , student._DormitoryId}
-            };
+                var block = Program.db.GetRecordsByField("Blocks", "Id", student._BlockId);
+                if (block.Count > 0 && block[0]["DormitoryId"] != null && block[0]["DormitoryId"] != DBNull.Value)
+                {
+                    info["DormitoryId"] = block[0]["DormitoryId"];
+                }
+            }
+
             return info;
         }
-        public static void AddStudent()
+        public static bool AddStudent(string fullname, string socialnumber, string phonenumber, string address, string studentid)
         {
-            Student student = Program.GetStudentInfo();
-            Program.db.InsertRecord("Studetns", StudentManager.ToDictionary(student));
+            try
+            {
+                Student student = new Student(fullname, socialnumber, phonenumber, address, studentid);
+                Program.db.InsertRecord("Students", StudentManager.ToDictionary(student));
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+            
         }
-        public static void RemoveStudent(string socialNumber)
+        public static bool RemoveStudent(string socialNumber)
         {
-            if (Program.db.DoesSocialNumberExist("Students", socialNumber))
+            try
             {
                 Program.db.DeleteRecord("Students", "SocialNumber", socialNumber);
-                WriteLine("دانشجو با موفقیت حذف شد.");
+                return true;
             }
-            else
-                WriteLine("دانشجویی با این شماره ملی یافت نشد.");
-        }
-        public static void UpdateStudentInfoWithCurrentData(string SocialNumber)
-        {
-            var studentRecord = Program.db.GetRecordsByField("Students", "SocialNumber", SocialNumber);
-            if (studentRecord == null || studentRecord.Count == 0)
+            catch (Exception)
             {
-                WriteLine("دانشجویی با این شماره ملی یافت نشد.");
-                return;
+                return false;
             }
-
-            var student = studentRecord[0];
-            string currentPhoneNumber = student["PhoneNumber"]?.ToString() ?? "";
-            string currentAddress = student["Address"]?.ToString() ?? "";
-            string newPhone = ReadLine();
-            if (string.IsNullOrEmpty(newPhone)) newPhone = currentPhoneNumber;
-            string newAddress = ReadLine();
-            if (string.IsNullOrEmpty(newAddress)) newAddress = currentAddress;
-
-            var updateFields = new Dictionary<string, object>
-        {
-            { "PhoneNumber", newPhone },
-            { "Address", newAddress }
-        };
-            Program.db.UpdateRecord("Students", updateFields, "SocialNumber", SocialNumber);
-            WriteLine("\nتغییرات با موفقیت ذخیره شد.");
         }
-        public static void SerachStudent(string socialNumber, string phoneNumber = null)
+        public static bool UpdateStudentInfoWithCurrentData(string SocialNumber, string newphone, string newaddress)
         {
-            var studentRecord = phoneNumber == null ?
-                Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber) :
-                Program.db.GetRecordsByField("Students", "PhoneNumber", phoneNumber);
-
-            if (studentRecord == null || studentRecord.Count == 0)
+            try
             {
-                WriteLine("دانشجویی با این شماره ملی یافت نشد.");
-                return;
-            }
+                var studentRecord = Program.db.GetRecordsByField("Students", "SocialNumber", SocialNumber);
+                var student = studentRecord[0];
+                string currentPhoneNumber = student["PhoneNumber"].ToString();
+                string currentAddress = student["Address"].ToString();
 
-            var student = studentRecord[0];
-            WriteLine($"نام کامل: {student["FullName"]}");
-            WriteLine($"کد ملی: {student["SocialNumber"]}");
-            WriteLine($"شماره دانشجویی: {student["StudentID"]}");
-            WriteLine($"شماره تلفن: {student["PhoneNumber"]}");
-            WriteLine($"آدرس: {student["Address"]}");
+                var updateFields = new Dictionary<string, object>
+                    {
+                        { "PhoneNumber", newphone=="" ? currentPhoneNumber : newphone },
+                        { "Address", newaddress == "" ? currentAddress : newaddress }
+                    };
+                Program.db.UpdateRecord("Students", updateFields, "SocialNumber", SocialNumber);
+                return true;
+            }
+            catch (Exception)
+            { return false; }
+        }
+        public static bool SerachStudent(string socialNumber, string phoneNumber = "")
+        {
+            try
+            {
+                if(phoneNumber == "")
+                {
+                    Program.db.ShowRecordsByField("Students", "SocialNumber", socialNumber);
+                    return true;
+                }
+                else
+                {
+                    Program.db.ShowRecordsByField("Students", "PhoneNumber", phoneNumber);
+                    return true;
+                }
+                    
+            }
+            catch(Exception) 
+            { return false; }
+            
         }
         public static void ChangeDoirmiBlckRoom(string socialNumber)
         {
@@ -1519,6 +1545,7 @@ namespace Dormitory
             if (success)
             {
                 AnsiConsole.MarkupLine($"[green]{username} , Wellcome To Dormitory Mangement App[/]");
+                Thread.Sleep(3000);
                 mainMenu();
             }
             else
@@ -1747,6 +1774,7 @@ namespace Dormitory
                         blocksupervisormngmnt();
                         break;
                     case "3. Managa Students":
+                        studentMngmnt();
                         break;
                     case "4. Back to main menu":
                         mainMenu();
@@ -1834,7 +1862,7 @@ namespace Dormitory
                     "2. Remove Existing Dormitory supervisor",
                     "3. Edit Dormitory Supervisor informatioans",
                     "4. Show All Dormitory Supervisors",
-                    "5. Back to main menu"
+                    "5. Back to previous menu"
                 }));
                 switch (choice)
                 {
@@ -1850,7 +1878,7 @@ namespace Dormitory
                     case "4. Show All Dormitory Supervisors":
                         Program.ShowAllSupreVisor();
                         break;
-                    case "5. Back to main menu":
+                    case "5. Back to previous menu":
                         peoplemngmnt();
                         break;
 
@@ -1871,7 +1899,7 @@ namespace Dormitory
                     "2. Remove Existing Block supervisor",
                     "3. Edit Block Supervisor informatioans",
                     "4. Show All Block Supervisors",
-                    "5. Back to main menu"
+                    "5. Back to previous menu"
                 }));
                 switch (choice)
                 {
@@ -1887,7 +1915,51 @@ namespace Dormitory
                     case "4. Show All Block Supervisors":
                         Program.ShowBlockSupervisor();
                         break;
-                    case "5. Back to main menu":
+                    case "5. Back to previous menu":
+                        peoplemngmnt();
+                        break;
+
+                }
+                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+                ReadLine();
+            }
+        }
+
+        public static void studentMngmnt()
+        {
+            while (true)
+            {
+                Clear();
+                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Supervisor Management Menu[/]").PageSize(10).AddChoices(new[]
+                {
+                    "1. Register New Student",
+                    "2. Remove Existing Student",
+                    "3. Edit Student informatioans",
+                    "4. Search for a student",
+                    "5. Show complete student details",
+                    "6. Register student in dormitory",
+                    "7. Back to previous menu"
+                }));
+                switch (choice)
+                {
+                    case "1. Register New Student":
+                        Program.GetStudentInfo();
+                        break;
+                    case "2. Remove Existing Student":
+                        Program.RemoveStudent();
+                        break;
+                    case "3. Edit Student informatioans":
+                        Program.UpdateStudentInfo();
+                        break;
+                    case "4. Search for a student":
+                        Program.SerachStudent();
+                        break;
+                    case "5. Show complete student details":
+                        Program.showStudentwithdata();
+                        break;
+                    case "6. Register student in dormitory":
+                        break;
+                    case "7. Back to previous menu":
                         peoplemngmnt();
                         break;
 
@@ -1902,89 +1974,253 @@ namespace Dormitory
         public static int MAX_ROOM_CAPACITY = 6;
         public static DatabaseManager db;
         //student
-        public static Student GetStudentInfo()
+        public static void GetStudentInfo()
         {
-            WriteLine("نام کامل: ");
-            string FullName = ReadLine();
-            WriteLine("شماره ملی: ");
-            string SocialNumber = ReadLine();
-            WriteLine("شماره تماس: ");
-            string PhoneNumber = ReadLine();
-            WriteLine("آدرس: ");
-            string Address = ReadLine();
-            WriteLine("شماره دانشجویی: ");
-            string StudentId = ReadLine();
-            Student student = GetStudentPlace(FullName, SocialNumber, PhoneNumber, Address, StudentId);
-            return student;
-        }
-        public static Student GetStudentPlace(string fullName, string socialNumber, string phoneNumber, string address, string studentId)
-        {
-            WriteLine("لیست خوابگاه‌ها:");
-            var dormitories = db.GetAllRecords("Dormitories");
-            foreach (var dorm in dormitories)
-                WriteLine($"{dorm["Id"]}: {dorm["Name"]} - {dorm["Address"]}");
-
-            Write("آیدی خوابگاه انتخابی: ");
-            int dormitoryId = int.Parse(ReadLine());
-
-            WriteLine("لیست بلوک‌های خوابگاه:");
-            var blocks = db.GetRecordsByField("Blocks", "DormitoryId", dormitoryId);
-            foreach (var block in blocks)
-                WriteLine($"{block["Id"]}: {block["Name"]}");
-
-            Write("آیدی بلوک انتخابی: ");
-            int blockId = int.Parse(ReadLine());
-
-            WriteLine("اتاق‌های دارای ظرفیت باقی‌مانده:");
-            var rooms = db.GetRecordsByField("Rooms", "BlockId", blockId);
-            foreach (var room in rooms)
+            try
             {
-                int RoomId = Convert.ToInt32(room["Id"]);
-                int capacity = Convert.ToInt32(room["Capacity"]);
-                var students = db.GetRecordsByField("Students", "RoomId", RoomId);
-                if (students.Count < capacity)
+                AnsiConsole.MarkupLine("[blue]Register New Student[/]");
+                string FullName = AnsiConsole.Ask<string>("FullName : ");
+                if (ENUserInterFace.checkback(FullName)) ENUserInterFace.studentMngmnt();
+                string SocialNumber = AnsiConsole.Ask<string>("Social Nuumber : ");
+                if (ENUserInterFace.checkback(SocialNumber)) ENUserInterFace.studentMngmnt();
+                string PhoneNumber = AnsiConsole.Ask<string>("Phone Number : ");
+                if (ENUserInterFace.checkback(PhoneNumber)) ENUserInterFace.studentMngmnt();
+                string Address = AnsiConsole.Ask<string>("Address : ");
+                if (ENUserInterFace.checkback(Address)) ENUserInterFace.studentMngmnt();
+                string studentid = AnsiConsole.Ask<string>("Student ID : ");
+                if (ENUserInterFace.checkback(studentid)) ENUserInterFace.studentMngmnt();
+                bool doen = StudentManager.AddStudent(FullName, SocialNumber, PhoneNumber, Address, studentid);
+                if (doen)
                 {
-                    int remaining = capacity - students.Count;
-                    WriteLine($"{room["Id"]}: اتاق {room["RoomNumber"]} - باقی‌مانده {remaining}");
+                    AnsiConsole.MarkupLine("[green]Student Created successflly .[/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.studentMngmnt();
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("[red]Creating student failed, please try again .[/]");
+                    Thread.Sleep(40000);
+                    ENUserInterFace.studentMngmnt();
                 }
             }
+            catch (Exception)
+            {
+                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.studentMngmnt();
+            }
+        }
+        public static void GetStudentPlace(string fullName, string socialNumber, string phoneNumber, string address, string studentId)
+        {
+            AnsiConsole.MarkupLine("[blue]Dormitories(remeber ID)[/]");
+            db.ShowAllrecords("Dormitories", false);
+            AnsiConsole.MarkupLine("[blue]Register Student in dormitory[/]");
+            int dormitoryId = AnsiConsole.Ask<int>("Dormitory ID choosen : ");
+            AnsiConsole.MarkupLine("[blue]Blocks(remeber ID)[/]");
+            db.ShowAllrecords("Blocks", false);
+            int blockid = AnsiConsole.Ask<int>("Block ID choosen : ");
+            var block = db.GetRecordsByField("Blocks", "Id", blockid);
+            if(block.Count() > 0)
+            {
+                int dormid = int.Parse(block[0]["DormitoryId"].ToString());
+                if(dormid == dormitoryId)
+                {
 
-            Write("آیدی اتاق انتخابی: ");
-            int roomId = int.Parse(ReadLine());
-            Student student = new Student(fullName, socialNumber, phoneNumber, address, studentId, roomId.ToString(), blockId.ToString(), dormitoryId.ToString());
-            return student;
+                }
+            }
+           
+            //WriteLine("اتاق‌های دارای ظرفیت باقی‌مانده:");
+            //var rooms = db.GetRecordsByField("Rooms", "BlockId", blockId);
+            //foreach (var room in rooms)
+            //{
+            //    int RoomId = Convert.ToInt32(room["Id"]);
+            //    int capacity = Convert.ToInt32(room["Capacity"]);
+            //    var students = db.GetRecordsByField("Students", "RoomId", RoomId);
+            //    if (students.Count < capacity)
+            //    {
+            //        int remaining = capacity - students.Count;
+            //        WriteLine($"{room["Id"]}: اتاق {room["RoomNumber"]} - باقی‌مانده {remaining}");
+            //    }
+            //}
+
+            //Write("آیدی اتاق انتخابی: ");
+            //int roomId = int.Parse(ReadLine());
+            //Student student = new Student(fullName, socialNumber, phoneNumber, address, studentId, roomId.ToString(), blockId.ToString(), dormitoryId.ToString());
+            //return student;
         }
         public static void RemoveStudent()
         {
-            WriteLine("کد ملی دانشجو را وارد کنید.");
-            string socialNumber = ReadLine();
-            StudentManager.RemoveStudent(socialNumber);
+            try
+            {
+                AnsiConsole.MarkupLine("[blue]Remove Student[/]");
+                string socialnumber = AnsiConsole.Ask<string>("Enter the social number of student you want to remove : ");
+                if (ENUserInterFace.checkback(socialnumber)) ENUserInterFace.studentMngmnt();
+
+                var data = db.GetRecordsByField("Students", "SocialNumber", socialnumber);
+                if (data.Count > 0)
+                {
+                    var answ = AnsiConsole.Ask<string>($"A student with SocialNumber : {socialnumber} & Name : {data[0]["FullName"]} found , are sure to remove ? (Y/N) ");
+                    if (answ.ToLower() == "y")
+                    {
+                        bool done = StudentManager.RemoveStudent(socialnumber);
+                        if (done)
+                        {
+                            AnsiConsole.MarkupLine("[green]Student deleted successfully.[/]");
+                            Thread.Sleep(3000);
+                            ENUserInterFace.studentMngmnt();
+                        }
+                    }
+                    else if (answ.ToLower() == "n")
+                    {
+                        ENUserInterFace.studentMngmnt();
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine("[red]unkonwn command,please retry again... [/]");
+                        Thread.Sleep(3000);
+                        RemoveStudent();
+                    }
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[red]No student found with SocialNumber : {socialnumber} ![/]");
+                    Thread.Sleep(3000);
+                    RemoveStudent();
+                }
+            }
+            catch (Exception)
+            {
+                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.studentMngmnt();
+            }
         }
         public static void UpdateStudentInfo()
         {
-            WriteLine("کد ملی دانشجو را وارد کنید.");
-            string socialNumber = ReadLine();
-            StudentManager.UpdateStudentInfoWithCurrentData(socialNumber);
+            try
+            {
+                AnsiConsole.MarkupLine("[blue]Update Student Supervisor infomations[/]");
+                string SoicalNumber = AnsiConsole.Ask<string>("Enter Student's SocialNumber : ");
+                if (ENUserInterFace.checkback(SoicalNumber)) ENUserInterFace.studentMngmnt();
+                var studentrecord = db.GetRecordsByField("Students", "SocialNumber", SoicalNumber);
+                if (studentrecord == null || studentrecord.Count == 0)
+                {
+                    AnsiConsole.MarkupLine($"[red]No Student found with the SocialNumber : {SoicalNumber} ![/]");
+                    Thread.Sleep(3000);
+                    UpdateStudentInfo();
+                }
+                string newPhone = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Phone Number :(if you don't want to change it,leave it blank) ").AllowEmpty());
+                if (ENUserInterFace.checkback(newPhone)) ENUserInterFace.studentMngmnt();
+                var newAddress = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Address :(if you don't want to change it,leave it blank) ").AllowEmpty());
+                if (ENUserInterFace.checkback(newAddress)) ENUserInterFace.studentMngmnt();
+                bool done = StudentManager.UpdateStudentInfoWithCurrentData(SoicalNumber, newPhone, newAddress);
+                if (done)
+                {
+                    AnsiConsole.MarkupLine("[green]Informations updated successfully.[/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.studentMngmnt();
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("[red]Updating information failed, please try later [/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.studentMngmnt();
+                }
+            }
+            catch (Exception)
+            {
+                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.studentMngmnt();
+            }
         }
         public static void SerachStudent()
         {
-            WriteLine("کد ملی / شماره تلفن دانشجو را وارد کنید.");
-            string socialNumberOrPhoneNumber = ReadLine();
+            try
+            {
+                AnsiConsole.MarkupLine("[blue]Search Student[/]");
+                string socialNumberOrPhoneNumber = AnsiConsole.Ask<string>("Enter Social Number or Phone number to search : ");
+                if (ENUserInterFace.checkback(socialNumberOrPhoneNumber)) ENUserInterFace.studentMngmnt();
+                if (Security.ValidPhoneNumber(socialNumberOrPhoneNumber))
+                {
+                    var studnet= Program.db.GetRecordsByField("Students", "PhoneNumber", socialNumberOrPhoneNumber);
+                    if (studnet.Count() > 0)
+                    {
+                        bool done = StudentManager.SerachStudent(null, socialNumberOrPhoneNumber);
+                        if(done) ENUserInterFace.studentMngmnt();
+                        else
+                        {
+                            AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                            Thread.Sleep(3000);
+                            ENUserInterFace.studentMngmnt();
+                        }
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine($"[red]No student found with phone number : {socialNumberOrPhoneNumber}");
+                        Thread.Sleep(3000);
+                        ENUserInterFace.studentMngmnt();          
+                    }
+                }
+                else if(Security.ValidSocialNumber(socialNumberOrPhoneNumber))
+                {
+                    var studnet = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumberOrPhoneNumber);
+                    if (studnet.Count() > 0)
+                    {
+                        bool done = StudentManager.SerachStudent(socialNumberOrPhoneNumber);
+                        if (done) ENUserInterFace.studentMngmnt();
+                        else
+                        {
+                            AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                            Thread.Sleep(3000);
+                            ENUserInterFace.studentMngmnt();
+                        }
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine($"[red]No student found with social number : {socialNumberOrPhoneNumber}");
+                        Thread.Sleep(3000);
+                        ENUserInterFace.studentMngmnt();
+                    }
 
-            if (Security.ValidPhoneNumber(socialNumberOrPhoneNumber))
-            {
-                StudentManager.SerachStudent(null, socialNumberOrPhoneNumber);
+                }
             }
-            else
+            catch(Exception)
             {
-                StudentManager.SerachStudent(socialNumberOrPhoneNumber);
+                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.studentMngmnt();
             }
         }
         public static void ChangeStudentPlace()
         {
-            WriteLine("کد ملی دانشجو را وارد کنید.");
-            string socialNumber = ReadLine();
-            StudentManager.ChangeDoirmiBlckRoom(socialNumber);
+            //WriteLine("کد ملی دانشجو را وارد کنید.");
+            //string socialNumber = ReadLine();
+            //StudentManager.ChangeDoirmiBlckRoom(socialNumber);
+        }
+        public static void showStudentwithdata()
+        {
+            try
+            {
+                AnsiConsole.MarkupLine("[blue]Show student information[/]");
+                string socialnumber = AnsiConsole.Ask<string>("Social Number : ");
+                if (db.GetRecordsByField("Students", "SocialNumber", socialnumber).Count() > 0)
+                {
+                    db.ShowRecordsByField("Students", "SocialNumber", socialnumber);
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[red]No student found with social number : {socialnumber}[/]");
+                    Thread.Sleep(3000);
+                    showStudentwithdata();
+                }
+            }
+            catch (Exception)
+            {
+                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.studentMngmnt();
+            }
         }
         //dormitory supervisor
         public static void GetSuperVisorInfo()
@@ -2007,7 +2243,7 @@ namespace Dormitory
                 {
                     AnsiConsole.MarkupLine("[green]Dormitory Supervisor Created successflly .[/]");
                     Thread.Sleep(3000);
-                    ENUserInterFace.mainMenu();
+                    ENUserInterFace.sueprvisormngmnt();
                 }
                 else
                 {
@@ -2031,10 +2267,10 @@ namespace Dormitory
                 string socialnumber = AnsiConsole.Ask<string>("Enter the social number of supervisor you want to remove : ");
                 if (ENUserInterFace.checkback(socialnumber)) ENUserInterFace.sueprvisormngmnt();
 
-                var data = db.GetRecordsByField("DormitorySupervisors", "SocialNuumber", socialnumber);
+                var data = db.GetRecordsByField("DormitorySupervisors", "SocialNumber", socialnumber);
                 if (data.Count > 0)
                 {
-                    var answ = AnsiConsole.Ask<string>($"A dormitory Supervisor with SocialNumber : {socialnumber} & Name : {data[0]["FullName"]} found , are sure to remove ? [Y/N] ");
+                    var answ = AnsiConsole.Ask<string>($"A dormitory Supervisor with SocialNumber : {socialnumber} & Name : {data[0]["FullName"]} found , are sure to remove ? (Y/N) ");
                     if (answ.ToLower() == "y")
                     {
                         bool done = DormitorySuperVisorManager.DeleteSpuervisor(socialnumber);
@@ -2042,7 +2278,7 @@ namespace Dormitory
                         {
                             AnsiConsole.MarkupLine("[green]Dormitory Suupervisor deleted successfully.[/]");
                             Thread.Sleep(3000);
-                            ENUserInterFace.mainMenu();
+                            ENUserInterFace.sueprvisormngmnt();
                         }
                     }
                     else if (answ.ToLower() == "n")
@@ -2095,7 +2331,7 @@ namespace Dormitory
                 {
                     AnsiConsole.MarkupLine("[green]Informations updated successfully.[/]");
                     Thread.Sleep(3000);
-                    ENUserInterFace.mainMenu();
+                    ENUserInterFace.sueprvisormngmnt();
                 }
                 else
                 {
@@ -2155,7 +2391,7 @@ namespace Dormitory
                 {
                     AnsiConsole.MarkupLine("[green]Dormitory Block Supervisor Created successfully.[/]");
                     Thread.Sleep(3000);
-                    ENUserInterFace.mainMenu();
+                    ENUserInterFace.blocksupervisormngmnt();
                 }
                 else if (done == "Student Exists But SocialNumber Is Not For a Student")
                 {
@@ -2209,7 +2445,7 @@ namespace Dormitory
                             AnsiConsole.MarkupLine("[red]Failed to delete. Please try again.[/]");
                         }
                         Thread.Sleep(3000);
-                        ENUserInterFace.mainMenu();
+                        ENUserInterFace.blocksupervisormngmnt();
                     }
                     else if (answ.ToLower() == "n")
                     {
@@ -2229,11 +2465,10 @@ namespace Dormitory
                     RemoveBlockSupervisor();
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
-                WriteLine(ex.ToString());
-                Thread.Sleep(40000);
+                Thread.Sleep(3000);
                 ENUserInterFace.blocksupervisormngmnt();
             }
         }
@@ -2262,7 +2497,7 @@ namespace Dormitory
                 {
                     AnsiConsole.MarkupLine("[green]Informations updated successfully.[/]");
                     Thread.Sleep(3000);
-                    ENUserInterFace.mainMenu();
+                    ENUserInterFace.blocksupervisormngmnt();
                 }
                 else
                 {
@@ -2526,7 +2761,7 @@ namespace Dormitory
                 {
                     AnsiConsole.MarkupLine("[green]Dormitory Created successflly.[/]");
                     Thread.Sleep(3000);
-                    ENUserInterFace.mainMenu();
+                    ENUserInterFace.dormitorymngmnt();
                 }
                 else
                 {
@@ -2561,7 +2796,7 @@ namespace Dormitory
                         {
                             AnsiConsole.MarkupLine("[green]Dormitory deleted successfully.[/]");
                             Thread.Sleep(3000);
-                            ENUserInterFace.mainMenu();
+                            ENUserInterFace.dormitorymngmnt();
                         }
                     }
                     else if (answ.ToLower() == "n")
@@ -2614,7 +2849,7 @@ namespace Dormitory
                 {
                     AnsiConsole.MarkupLine("[green]Informations updated successfully.[/]");
                     Thread.Sleep(3000);
-                    ENUserInterFace.mainMenu();
+                    ENUserInterFace.dormitorymngmnt();
                 }
                 else
                 {
@@ -2670,7 +2905,7 @@ namespace Dormitory
                 {
                     AnsiConsole.MarkupLine("[green]Block Created successflly.[/]");
                     Thread.Sleep(3000);
-                    ENUserInterFace.mainMenu();
+                    ENUserInterFace.blockmngmnt();
                 }
                 else
                 {
@@ -2706,7 +2941,7 @@ namespace Dormitory
                         {
                             AnsiConsole.MarkupLine("[green]Block deleted successfully.[/]");
                             Thread.Sleep(3000);
-                            ENUserInterFace.mainMenu();
+                            ENUserInterFace.blockmngmnt();
                         }
                     }
                     else if (answ.ToLower() == "n")
@@ -2759,7 +2994,7 @@ namespace Dormitory
                 {
                     AnsiConsole.MarkupLine("[green]Informations updated successfully.[/]");
                     Thread.Sleep(3000);
-                    ENUserInterFace.mainMenu();
+                    ENUserInterFace.blockmngmnt();
                 }
                 else
                 {
