@@ -1474,103 +1474,6 @@ namespace Dormitory
             }
         }
     }
-
-    class report
-    {
-        public static void ShowStudentAccommodation()
-        {
-            try
-            {
-                Program.showStudentAccommodation();
-            }
-            catch (Exception)
-            {
-                ENUserInterFace.reporting();
-            }
-        }
-        public static void ShowFullAndEmptyRoom()
-        {
-            try
-            {
-                Program.showFullRooms();
-                Program.showEmptyRooms();
-            }
-            catch (Exception)
-            {
-                ENUserInterFace.reporting();
-            }
-        }
-        public static void showRemainingCapacity()
-        {
-            try
-            {
-                Program.showRemainingCapacity();
-            }
-            catch (Exception)
-            {
-                ENUserInterFace.reporting();
-            }
-        }
-        public static void ShowAllEquipment()
-        {
-            try
-            {
-                Program.db.ShowAllrecords("Equipment");
-            }
-            catch (Exception)
-            {
-                ENUserInterFace.reporting();
-            }
-        }
-
-        public static void ShowAllEquipmentAssignedToEachRoom()
-        {
-            try
-            {
-                Program.showAllEquipmentAssignedToEachRoom();
-            }
-            catch (Exception)
-            {
-                ENUserInterFace.reporting();
-            }
-        }
-
-        public static void ShowAllEquipmentAssignedToEachStudent()
-        {
-            try
-            {
-                Program.showAllEquipmentAssignedToEachStudent();
-            }
-            catch (Exception)
-            {
-                ENUserInterFace.reporting();
-            }
-        }
-
-        public static void ShowAllDefectiveAndInrepairEquipment()
-        {
-            try
-            {
-                Program.showAllDefectiveAndInrepairEquipment();
-            }
-            catch (Exception)
-            {
-                ENUserInterFace.reporting();
-            }
-        }
-        public static void ShowAllRepairRequests()
-        {
-            try
-            {
-                Program.db.ShowAllrecords("RepairRequests");
-            }
-            catch (Exception)
-            {
-                ENUserInterFace.reporting();
-            }
-        }
-
-    }
     public enum Condition
     {
         Intact,
@@ -2187,13 +2090,13 @@ namespace Dormitory
                 switch (choice)
                 {
                     case "1. Overall student accommodation statistics":
-                        Program.ShowStudentAccommodation();
+                        Program.showStudentAccommodation();
                         break;
                     case "2. List of empty and full rooms":
                         Program.ShowFullAndEmptyRoom();
                         break;
                     case "3. The remaining capacity of each dormitory and block":
-                        Program.ShowRemainingCapacity();
+                        Program.showRemainingCapacity();
                         break;
                     case "4. Back to main menu":
                         reporting();
@@ -2222,13 +2125,13 @@ namespace Dormitory
                         Program.ShowAllEquipment();
                         break;
                     case "2. The Asset allocated to each room":
-                        Program.ShowAllEquipmentAssignedToEachRoom();
+                        Program.showAllEquipmentAssignedToEachRoom();
                         break;
                     case "3. The Asset assigned to each student":
-                        Program.ShowAllEquipmentAssignedToEachStudent();
+                        Program.showAllEquipmentAssignedToEachStudent();
                         break;
                     case "4. Defective Asset and in repairing":
-                        Program.ShowAllDefectiveAndInrepairEquipment();
+                        Program.showAllDefectiveAndInRepairEquipment();
                         break;
                     case "5. Back to main menu":
                         reporting();
@@ -2252,7 +2155,7 @@ namespace Dormitory
                 switch (choice)
                 {
                     case "1. Report repair requests":
-                        Program.ShowAllRepairRequests();
+                        Program.showAllRepairRequests();
                         break;
                     case "2. Report of student history of accommodation":
                         break;
@@ -3081,144 +2984,11 @@ namespace Dormitory
             WriteLine("List of equipment that are being repaired: ");
             EquipmentManager.showEquipmentWithCondition(Condition.Reparing);
         }
-        public static void showStudentAccommodation()
-        {
-            List<Dictionary<string, object>> allDorms = Program.db.GetAllRecords("Dormitories");
-            if (allDorms.Count == 0)
-            {
-                AnsiConsole.MarkupLine("[red]No records found in table Dormitories[/]");
-                return;
-            }
-            foreach (Dictionary<string, object> dorm in allDorms)
-            {
-                List<Dictionary<string, object>> dormBlocks = Program.db.GetRecordsByField("Blocks", "DormitoryId", Convert.ToInt32(dorm["Id"]));
-                if (dormBlocks.Count == 0)
-                {
-                    AnsiConsole.MarkupLine("[red]No records found in table Blocks[/]");
-                    return;
-                }
-                foreach (Dictionary<string, object> block in dormBlocks)
-                {
-                    List<Dictionary<string, object>> blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
-                    if (blockRooms.Count == 0)
-                    {
-                        AnsiConsole.MarkupLine("[red]No records found in table Rooms[/]");
-                        return;
-                    }
-                    foreach (Dictionary<string, object> room in blockRooms)
-                    {
-                        List<Dictionary<string, object>> roomStudents = Program.db.GetRecordsByField("Students", "RoomId", Convert.ToInt32(room["Id"]));
-                        if (roomStudents.Count == 0)
-                        {
-                            AnsiConsole.MarkupLine("[red]No records found in table Students[/]");
-                            return;
-                        }
-                        foreach (Dictionary<string, object> student in roomStudents)
-                        {
-                            AnsiConsole.WriteLine($"Student: {student["FullName"].ToString()} with Student ID: {student["StudentID"]}, in Room: {room["Name"]}, in Block: {block["Name"]}, in Dormitory: {dorm["Name"]}");
-                        }
-                    }
-                }
-            }
-        }
-        public static void showEmptyRooms()
-        {
-            List<Dictionary<string, object>> emptyRooms = Program.db.GetRecordsByField("Rooms", "Capacity", 6);
-            foreach (Dictionary<string, object> room in emptyRooms)
-            {
-                AnsiConsole.WriteLine($"Room: {room["RoomNumber"]}, located in Floor: {room["FloorNumber"]}, in Block: {room["BlockId"]}, is empety");
-            }
-        }
-        public static void showFullRooms()
-        {
-            List<Dictionary<string, object>> fullRooms = Program.db.GetRecordsByField("Rooms", "Capacity", 0);
-            if (fullRooms == null || fullRooms.Count == 0)
-            {
-                AnsiConsole.MarkupLine($"[red]No records found[/]");
-                return;
-            }
-            foreach (Dictionary<string, object> room in fullRooms)
-            {
-                AnsiConsole.WriteLine($"Room: {room["RoomNumber"]}, located in Floor: {room["FloorNumber"]}, in Block: {room["BlockId"]}, is full");
-            }
-        }
-        public static void showRemainingCapacity()
-        {
-            List<Dictionary<string, object>> allDormitory = Program.db.GetAllRecords("Dormitories");
-            if (allDormitory.Count == 0)
-            {
-                AnsiConsole.MarkupLine("[red]No records found in table Dormitories[/]");
-                return;
-            }
-            foreach (Dictionary<string, object> dormitory in allDormitory)
-            {
-                AnsiConsole.WriteLine($"Dormitory: {dormitory["Name"]}, has {dormitory["Capacity"]} remaining space.");
-            }
-
-            List<Dictionary<string, object>> allBlocks = Program.db.GetAllRecords("Blocks");
-            if (allBlocks.Count == 0)
-            {
-                AnsiConsole.MarkupLine("[red]No records found in table Blocks[/]");
-                return;
-            }
-            foreach (Dictionary<string, object> block in allBlocks)
-            {
-                int capacity = Convert.ToInt32(block["NumberOfRooms"]) * 6;
-                List<Dictionary<string, object>> Rooms = Program.db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
-                foreach (Dictionary<string, object> roomcapacity in Rooms)
-                {
-                    int n = 6 - Convert.ToInt32(roomcapacity["Capacity"]);
-                    capacity -= n;
-                }
-                AnsiConsole.WriteLine($"Block: {block["Name"]}, has {capacity} remaining space.");
-            }
-        }
-        //public static void showOverallAccommodationReport()
-        //{
-        //    List<Dictionary<string, object>> allDorms = Program.db.GetAllRecords("Dormitories");
-        //    foreach (Dictionary<string, object> dorm in allDorms)
-        //    {
-        //        List<Dictionary<string, object>> dormBlocks = Program.db.GetRecordsByField("Blocks", "DormitoryId", Convert.ToInt32(dorm["Id"]));
-        //        foreach (Dictionary<string, object> block in dormBlocks)
-        //        {
-        //            List<Dictionary<string, object>> blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
-        //            foreach (Dictionary<string, object> room in blockRooms)
-        //            {
-        //                List<Dictionary<string, object>> roomStudents = Program.db.GetRecordsByField("Students", "RoomId", Convert.ToInt32(room["Id"]));
-        //                foreach (Dictionary<string, object> student in roomStudents)
-        //                {
-        //                    WriteLine($"Student: {student["FullName"].ToString()} with Student ID: {student["StudentID"]}, in Room: {room["Name"]}, in Block: {block["Name"]}, in Dormitory: {dorm["Name"]}");
-        //                }
-        //                WriteLine("-------------");
-        //            }
-        //        }
-        //    }
-        //}
         public static void requestRepair()
         {
             Write("Enter property number of equipment that needs repairing: ");
             string propertyNumber = ReadLine();
             EquipmentManager.registerRepairRequest(propertyNumber);
-        }
-        public static void showAllRepairRequests()
-        {
-            List<Dictionary<string, object>> allRepairRequests = Program.db.GetAllRecords("RepairRequests");
-            foreach (Dictionary<string, object> request in allRepairRequests)
-            {
-                Dictionary<string, object> equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", Convert.ToInt32(request["PropertyNumber"]))[0];
-                Dictionary<string, object> room = Program.db.GetRecordsByField("Rooms", "Id", Convert.ToInt32(equipment["RoomId"]))[0];
-                Dictionary<string, object> block = Program.db.GetRecordsByField("Blocks", "Id", Convert.ToInt32(room["BlockId"]))[0];
-                if (equipment["OwnerId"] != DBNull.Value)
-                {
-                    Dictionary<string, object> student = Program.db.GetRecordsByField("Students", "Id", Convert.ToInt32(equipment["OwnerId"]))[0];
-                    WriteLine($"Request Number: {request["Id"]}, for a(n) {equipment["Type"]}, with Property Number: {request["PropertyNumber"]}, in Room: {room["RoomNumber"]}, in Block: {block["Name"]}, Owned By Student: {student["FullName"]}, with Student ID: {student["StudentID"]}");
-
-                }
-                else
-                {
-                    WriteLine($"Request Number: {request["Id"]}, for a(n) {equipment["Type"]}, with Property Number: {request["PropertyNumber"]}, in Room: {room["RoomNumber"]}, in Block: {block["Name"]}");
-                }
-            }
         }
         //dormitory
         public static void GetDormitoryInfo()
@@ -3488,116 +3258,6 @@ namespace Dormitory
             }
         }
 
-        public static void showAllEquipmentAssignedToEachRoom()
-        {
-            List<Dictionary<string, object>> allDorms = Program.db.GetAllRecords("Dormitories");
-            if (allDorms.Count == 0)
-            {
-                AnsiConsole.MarkupLine("[red]No records found in table Dormitories[/]");
-                return;
-            }
-            foreach (Dictionary<string, object> dorm in allDorms)
-            {
-                List<Dictionary<string, object>> dormBlocks = Program.db.GetRecordsByField("Blocks", "DormitoryId", Convert.ToInt32(dorm["Id"]));
-                if (dormBlocks.Count == 0)
-                {
-                    AnsiConsole.MarkupLine("[red]No records found in table Blocks[/]");
-                    return;
-                }
-                foreach (Dictionary<string, object> block in dormBlocks)
-                {
-                    List<Dictionary<string, object>> blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
-                    if (blockRooms.Count == 0)
-                    {
-                        AnsiConsole.MarkupLine("[red]No records found in table Rooms[/]");
-                        return;
-                    }
-                    foreach (Dictionary<string, object> room in blockRooms)
-                    {
-                        List<Dictionary<string, object>> equipment = Program.db.GetRecordsByField("Equipment", "RoomId", Convert.ToInt32(room["Id"]));
-                        if (equipment.Count == 0)
-                        {
-                            AnsiConsole.MarkupLine("[red]No records found in table Equipment[/]");
-                            return;
-                        }
-                        foreach (Dictionary<string, object> equip in equipment)
-                        {
-                            AnsiConsole.WriteLine($"Equipment: {equip["Type"]} with PartNumber: {equip["PartNumber"]}, in Room: {room["Name"]}, in Block: {block["Name"]}, in Dormitory: {dorm["Name"]}");
-                        }
-                    }
-                }
-            }
-        }
-        public static void showAllEquipmentAssignedToEachStudent()
-        {
-            List<Dictionary<string, object>> allDorms = Program.db.GetAllRecords("Dormitories");
-            if (allDorms.Count == 0)
-            {
-                AnsiConsole.MarkupLine("[red]No records found in table Dormitories[/]");
-                return;
-            }
-            foreach (Dictionary<string, object> dorm in allDorms)
-            {
-                List<Dictionary<string, object>> dormBlocks = Program.db.GetRecordsByField("Blocks", "DormitoryId", Convert.ToInt32(dorm["Id"]));
-                if (dormBlocks.Count == 0)
-                {
-                    AnsiConsole.MarkupLine("[red]No records found in table Blocks[/]");
-                    return;
-                }
-                foreach (Dictionary<string, object> block in dormBlocks)
-                {
-                    List<Dictionary<string, object>> blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
-                    if (blockRooms.Count == 0)
-                    {
-                        AnsiConsole.MarkupLine("[red]No records found in table Rooms[/]");
-                        return;
-                    }
-                    foreach (Dictionary<string, object> room in blockRooms)
-                    {
-                        List<Dictionary<string, object>> student = Program.db.GetRecordsByField("Students", "RoomId", Convert.ToInt32(room["Id"]));
-                        if (student.Count == 0)
-                        {
-                            AnsiConsole.MarkupLine("[red]No records found in table Students[/]");
-                            return;
-                        }
-                        foreach (Dictionary<string, object> stu in student)
-                        {
-                            List<Dictionary<string, object>> equipment = Program.db.GetRecordsByField("Equipment", "OwnerId", Convert.ToInt32(stu["Id"]));
-                            if (equipment.Count == 0)
-                            {
-                                AnsiConsole.MarkupLine("[red]No records found in table Equipment[/]");
-                                return;
-                            }
-                            foreach (Dictionary<string, object> equip in equipment)
-                            {
-                                AnsiConsole.WriteLine($"Equipment: {equip["Type"]} with PartNumber: {equip["PartNumber"]},is for {stu["FullName"]}, in Room: {room["Name"]}, in Block: {block["Name"]}, in Dormitory: {dorm["Name"]}");
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        public static void showAllDefectiveAndInrepairEquipment()
-        {
-            AnsiConsole.MarkupLine("[blue]Show all defective and inrepair equipment[/]");
-            List<Dictionary<string, object>> allEquipment = Program.db.GetAllRecords("Equipment");
-            if (allEquipment.Count == 0)
-            {
-                AnsiConsole.MarkupLine("[red]No records found in table Equipment[/]");
-                return;
-            }
-            List<Dictionary<string, object>> BrokenEquipment = Program.db.GetRecordsByField("Equipment", "Condition", "Broken");
-            foreach (Dictionary<string, object> equipment in BrokenEquipment)
-            {
-                AnsiConsole.WriteLine($"The situation of Equipment: {equipment["Type"]} with PartNumber: {equipment["PartNumber"]}, and with PropertyNumber: {equipment["PropertyNumber"]}, is Broken");
-            }
-            List<Dictionary<string, object>> RepairEquipment = Program.db.GetRecordsByField("Equipment", "Condition", "Reparing");
-            foreach (Dictionary<string, object> equipment in RepairEquipment)
-            {
-                AnsiConsole.WriteLine($"The situation of Equipment: {equipment["Type"]} with PartNumber: {equipment["PartNumber"]}, and with PropertyNumber: {equipment["PropertyNumber"]}, is Reparing");
-            }
-        }
         public static void ShowAllBlocks()
         {
             try
@@ -3865,18 +3525,75 @@ namespace Dormitory
                 ENUserInterFace.maintenancemngmnt();
             }
         }
-
-        public static void ShowStudentAccommodation()
+//Reporting
+        public static void showStudentAccommodation()
         {
             try
             {
                 AnsiConsole.MarkupLine("[blue]Show student accommodation[/]");
-                report.ShowStudentAccommodation();
+                List<Dictionary<string, object>> allDorms = Program.db.GetAllRecords("Dormitories");
+                if (allDorms.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[red]No records found in table Dormitories[/]");
+                    return;
+                }
+                foreach (Dictionary<string, object> dorm in allDorms)
+                {
+                    List<Dictionary<string, object>> dormBlocks = Program.db.GetRecordsByField("Blocks", "DormitoryId", Convert.ToInt32(dorm["Id"]));
+                    if (dormBlocks.Count == 0)
+                    {
+                        AnsiConsole.MarkupLine("[red]No records found in table Blocks[/]");
+                        return;
+                    }
+                    foreach (Dictionary<string, object> block in dormBlocks)
+                    {
+                        List<Dictionary<string, object>> blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
+                        if (blockRooms.Count == 0)
+                        {
+                            AnsiConsole.MarkupLine("[red]No records found in table Rooms[/]");
+                            return;
+                        }
+                        foreach (Dictionary<string, object> room in blockRooms)
+                        {
+                            List<Dictionary<string, object>> roomStudents = Program.db.GetRecordsByField("Students", "RoomId", Convert.ToInt32(room["Id"]));
+                            if (roomStudents.Count == 0)
+                            {
+                                AnsiConsole.MarkupLine("[red]No records found in table Students[/]");
+                                return;
+                            }
+                            foreach (Dictionary<string, object> student in roomStudents)
+                            {
+                                AnsiConsole.WriteLine($"Student: {student["FullName"].ToString()} with Student ID: {student["StudentID"]}, in Room: {room["Name"]}, in Block: {block["Name"]}, in Dormitory: {dorm["Name"]}");
+                            }
+                        }
+                    }
+                }
             }
             catch (Exception)
             {
                 Thread.Sleep(3000);
                 ENUserInterFace.reporting();
+            }
+        }
+        public static void showEmptyRooms()
+        {
+            List<Dictionary<string, object>> emptyRooms = Program.db.GetRecordsByField("Rooms", "Capacity", 6);
+            foreach (Dictionary<string, object> room in emptyRooms)
+            {
+                AnsiConsole.WriteLine($"Room: {room["RoomNumber"]}, located in Floor: {room["FloorNumber"]}, in Block: {room["BlockId"]}, is empety");
+            }
+        }
+        public static void showFullRooms()
+        {
+            List<Dictionary<string, object>> fullRooms = Program.db.GetRecordsByField("Rooms", "Capacity", 0);
+            if (fullRooms == null || fullRooms.Count == 0)
+            {
+                AnsiConsole.MarkupLine($"[red]No records found[/]");
+                return;
+            }
+            foreach (Dictionary<string, object> room in fullRooms)
+            {
+                AnsiConsole.WriteLine($"Room: {room["RoomNumber"]}, located in Floor: {room["FloorNumber"]}, in Block: {room["BlockId"]}, is full");
             }
         }
         public static void ShowFullAndEmptyRoom()
@@ -3884,7 +3601,8 @@ namespace Dormitory
             try
             {
                 AnsiConsole.MarkupLine("[blue]Show full and empty room[/]");
-                report.ShowFullAndEmptyRoom();
+                Program.showFullRooms();
+                Program.showEmptyRooms();
             }
             catch (Exception)
             {
@@ -3892,12 +3610,39 @@ namespace Dormitory
                 ENUserInterFace.reporting();
             }
         }
-        public static void ShowRemainingCapacity()
+        public static void showRemainingCapacity()
         {
             try
             {
                 AnsiConsole.MarkupLine("[blue]show remaining capacity[/]");
-                report.showRemainingCapacity();
+                List<Dictionary<string, object>> allDormitory = Program.db.GetAllRecords("Dormitories");
+                if (allDormitory.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[red]No records found in table Dormitories[/]");
+                    return;
+                }
+                foreach (Dictionary<string, object> dormitory in allDormitory)
+                {
+                    AnsiConsole.WriteLine($"Dormitory: {dormitory["Name"]}, has {dormitory["Capacity"]} remaining space.");
+                }
+
+                List<Dictionary<string, object>> allBlocks = Program.db.GetAllRecords("Blocks");
+                if (allBlocks.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[red]No records found in table Blocks[/]");
+                    return;
+                }
+                foreach (Dictionary<string, object> block in allBlocks)
+                {
+                    int capacity = Convert.ToInt32(block["NumberOfRooms"]) * 6;
+                    List<Dictionary<string, object>> Rooms = Program.db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
+                    foreach (Dictionary<string, object> roomcapacity in Rooms)
+                    {
+                        int n = 6 - Convert.ToInt32(roomcapacity["Capacity"]);
+                        capacity -= n;
+                    }
+                    AnsiConsole.WriteLine($"Block: {block["Name"]}, has {capacity} remaining space.");
+                }
             }
             catch (Exception)
             {
@@ -3910,7 +3655,7 @@ namespace Dormitory
             try
             {
                 AnsiConsole.MarkupLine("[blue]Show all equipment[/]");
-                report.ShowAllEquipment();
+                Program.db.ShowAllrecords("Equipment");
             }
             catch (Exception)
             {
@@ -3918,12 +3663,48 @@ namespace Dormitory
                 ENUserInterFace.reporting();
             }
         }
-        public static void ShowAllEquipmentAssignedToEachRoom()
+        public static void showAllEquipmentAssignedToEachRoom()
         {
             try
             {
                 AnsiConsole.MarkupLine("[blue]Show all equipment assigned to each room[/]");
-                report.ShowAllEquipmentAssignedToEachRoom();
+                List<Dictionary<string, object>> allDorms = Program.db.GetAllRecords("Dormitories");
+                if (allDorms.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[red]No records found in table Dormitories[/]");
+                    return;
+                }
+                foreach (Dictionary<string, object> dorm in allDorms)
+                {
+                    List<Dictionary<string, object>> dormBlocks = Program.db.GetRecordsByField("Blocks", "DormitoryId", Convert.ToInt32(dorm["Id"]));
+                    if (dormBlocks.Count == 0)
+                    {
+                        AnsiConsole.MarkupLine("[red]No records found in table Blocks[/]");
+                        return;
+                    }
+                    foreach (Dictionary<string, object> block in dormBlocks)
+                    {
+                        List<Dictionary<string, object>> blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
+                        if (blockRooms.Count == 0)
+                        {
+                            AnsiConsole.MarkupLine("[red]No records found in table Rooms[/]");
+                            return;
+                        }
+                        foreach (Dictionary<string, object> room in blockRooms)
+                        {
+                            List<Dictionary<string, object>> equipment = Program.db.GetRecordsByField("Equipment", "RoomId", Convert.ToInt32(room["Id"]));
+                            if (equipment.Count == 0)
+                            {
+                                AnsiConsole.MarkupLine("[red]No records found in table Equipment[/]");
+                                return;
+                            }
+                            foreach (Dictionary<string, object> equip in equipment)
+                            {
+                                AnsiConsole.WriteLine($"Equipment: {equip["Type"]} with PartNumber: {equip["PartNumber"]}, in Room: {room["Name"]}, in Block: {block["Name"]}, in Dormitory: {dorm["Name"]}");
+                            }
+                        }
+                    }
+                }
             }
             catch (Exception)
             {
@@ -3931,12 +3712,57 @@ namespace Dormitory
                 ENUserInterFace.reporting();
             }
         }
-        public static void ShowAllEquipmentAssignedToEachStudent()
+        public static void showAllEquipmentAssignedToEachStudent()
         {
             try
             {
                 AnsiConsole.MarkupLine("[blue]Show all equipment assigned to each student[/]");
-                report.ShowAllEquipmentAssignedToEachStudent();
+                List<Dictionary<string, object>> allDorms = Program.db.GetAllRecords("Dormitories");
+                if (allDorms.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[red]No records found in table Dormitories[/]");
+                    return;
+                }
+                foreach (Dictionary<string, object> dorm in allDorms)
+                {
+                    List<Dictionary<string, object>> dormBlocks = Program.db.GetRecordsByField("Blocks", "DormitoryId", Convert.ToInt32(dorm["Id"]));
+                    if (dormBlocks.Count == 0)
+                    {
+                        AnsiConsole.MarkupLine("[red]No records found in table Blocks[/]");
+                        return;
+                    }
+                    foreach (Dictionary<string, object> block in dormBlocks)
+                    {
+                        List<Dictionary<string, object>> blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
+                        if (blockRooms.Count == 0)
+                        {
+                            AnsiConsole.MarkupLine("[red]No records found in table Rooms[/]");
+                            return;
+                        }
+                        foreach (Dictionary<string, object> room in blockRooms)
+                        {
+                            List<Dictionary<string, object>> student = Program.db.GetRecordsByField("Students", "RoomId", Convert.ToInt32(room["Id"]));
+                            if (student.Count == 0)
+                            {
+                                AnsiConsole.MarkupLine("[red]No records found in table Students[/]");
+                                return;
+                            }
+                            foreach (Dictionary<string, object> stu in student)
+                            {
+                                List<Dictionary<string, object>> equipment = Program.db.GetRecordsByField("Equipment", "OwnerId", Convert.ToInt32(stu["Id"]));
+                                if (equipment.Count == 0)
+                                {
+                                    AnsiConsole.MarkupLine("[red]No records found in table Equipment[/]");
+                                    return;
+                                }
+                                foreach (Dictionary<string, object> equip in equipment)
+                                {
+                                    AnsiConsole.WriteLine($"Equipment: {equip["Type"]} with PartNumber: {equip["PartNumber"]},is for {stu["FullName"]}, in Room: {room["Name"]}, in Block: {block["Name"]}, in Dormitory: {dorm["Name"]}");
+                                }
+                            }
+                        }
+                    }
+                }
             }
             catch (Exception)
             {
@@ -3944,11 +3770,27 @@ namespace Dormitory
                 ENUserInterFace.reporting();
             }
         }
-        public static void ShowAllDefectiveAndInrepairEquipment()
+        public static void showAllDefectiveAndInRepairEquipment()
         {
             try
             {
-                report.ShowAllDefectiveAndInrepairEquipment();
+                AnsiConsole.MarkupLine("[blue]Show all defective and in repair equipment[/]");
+                List<Dictionary<string, object>> allEquipment = Program.db.GetAllRecords("Equipment");
+                if (allEquipment.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[red]No records found in table Equipment[/]");
+                    return;
+                }
+                List<Dictionary<string, object>> BrokenEquipment = Program.db.GetRecordsByField("Equipment", "Condition", "Broken");
+                foreach (Dictionary<string, object> equipment in BrokenEquipment)
+                {
+                    AnsiConsole.WriteLine($"The situation of Equipment: {equipment["Type"]} with PartNumber: {equipment["PartNumber"]}, and with PropertyNumber: {equipment["PropertyNumber"]}, is Broken");
+                }
+                List<Dictionary<string, object>> RepairEquipment = Program.db.GetRecordsByField("Equipment", "Condition", "Reparing");
+                foreach (Dictionary<string, object> equipment in RepairEquipment)
+                {
+                    AnsiConsole.WriteLine($"The situation of Equipment: {equipment["Type"]} with PartNumber: {equipment["PartNumber"]}, and with PropertyNumber: {equipment["PropertyNumber"]}, is Reparing");
+                }
             }
             catch (Exception)
             {
@@ -3956,12 +3798,33 @@ namespace Dormitory
                 ENUserInterFace.reporting();
             }
         }
-        public static void ShowAllRepairRequests()
+        public static void showAllRepairRequests()
         {
             try
             {
                 AnsiConsole.MarkupLine("[blue]Show all repair requests[/]");
-                report.ShowAllRepairRequests();
+                List<Dictionary<string, object>> allRepairRequests = Program.db.GetAllRecords("RepairRequests");
+                if (allRepairRequests.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[red]No records found in table RepairRequests[/]");
+                    return;
+                }
+                foreach (Dictionary<string, object> request in allRepairRequests)
+                {
+                    Dictionary<string, object> equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", Convert.ToInt32(request["PropertyNumber"]))[0];
+                    Dictionary<string, object> room = Program.db.GetRecordsByField("Rooms", "Id", Convert.ToInt32(equipment["RoomId"]))[0];
+                    Dictionary<string, object> block = Program.db.GetRecordsByField("Blocks", "Id", Convert.ToInt32(room["BlockId"]))[0];
+                    if (equipment["OwnerId"] != DBNull.Value)
+                    {
+                        Dictionary<string, object> student = Program.db.GetRecordsByField("Students", "Id", Convert.ToInt32(equipment["OwnerId"]))[0];
+                        WriteLine($"Request Number: {request["Id"]}, for a(n) {equipment["Type"]}, with Property Number: {request["PropertyNumber"]}, in Room: {room["RoomNumber"]}, in Block: {block["Name"]}, Owned By Student: {student["FullName"]}, with Student ID: {student["StudentID"]}");
+
+                    }
+                    else
+                    {
+                        WriteLine($"Request Number: {request["Id"]}, for a(n) {equipment["Type"]}, with Property Number: {request["PropertyNumber"]}, in Room: {room["RoomNumber"]}, in Block: {block["Name"]}");
+                    }
+                }
             }
             catch (Exception)
             {
@@ -3969,23 +3832,6 @@ namespace Dormitory
                 ENUserInterFace.reporting();
             }
         }
-
-        //public static void resetdatabase()
-        //{
-        //    using (var connection = new SqliteConnection("Data Source=MyDatabase.sqlite"))
-        //    {
-        //        connection.Open();
-
-        //        var command = connection.CreateCommand();
-        //        command.CommandText = @"
-        //            DELETE FROM Director;
-        //        ";
-
-        //        command.ExecuteNonQuery();
-
-        //        MessageBox.Show("اطلاعات دیتابیس با موفقیت پاک شد.", "بازنشانی", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        //    }
-        //}
         static void Main()
         {
             db = new DatabaseManager();
