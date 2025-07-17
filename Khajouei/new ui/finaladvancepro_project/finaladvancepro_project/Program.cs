@@ -1101,9 +1101,14 @@ namespace Dormitory
 	    string partNumber = propertyNumber.Substring(2, 3);
 
 	    Dictionary<string, object> Equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0];
-	    if (Equipment["OwnerId"] != -1 && Equipment["OwnerId"] != DBNull.Value) {
+	    if (Equipment["RoomId"] == roomId) {
+		    throw new ArgumentException("Equipment Already Assigned to This Room.");
+	    }
+
+	    if (Equipment["RoomId"] != -1 && Equipment["RoomId"] != DBNull.Value) {
 		    throw new ArgumentException("Invalid Property Number; This Equipment is Already Assigned To a Room.");
 	    }
+
 	    if (partNumber != "001") {
 		throw new ArgumentException("Invalid Property Number; Cannot Add a Personal Equipment To a Room Directly.");
 	    }
@@ -1124,25 +1129,41 @@ namespace Dormitory
 	    Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
         }
 
-        public static bool assignEquipmentToStudent(string propertyNumber, string socialNumber)
-        {
-            try
-            {
+        public static void assignEquipmentToStudent(string propertyNumber, string socialNumber)
+        {    
+	    int blockid = int.Parse(propertyNumber[1]);
+	    string partNumber = propertyNumber.Substring(2, 3);
 
-                Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
-                var StudentId = studentDict["Id"];
-                var RoomId = studentDict["RoomId"];
-                Dictionary<string, object> EquipmentUpdatedValues = new Dictionary<string, object> {
-                    { "RoomId", RoomId },
-                    { "OwnerId", StudentId }
-                };
-                Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
-                return true;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
+	    Dictionary<string, object> Student = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
+	    Dictionary<string, object> Equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0];
+	    if (Equipment["OwnerId"] == Student["Id"]) {
+		    throw new ArgumentException("Equipment Already Assigned to This Student.");
+	    }
+
+	    if (partNumber == "001") {
+		throw new ArgumentException("Invalid Property Number; Cannot Assign a Shared Equipment To a Single Person.");
+	    }
+
+	    if (Equipment["OwnerId"] != -1 && Equipment["OwnerId"] != DBNull.Value) {
+		    throw new ArgumentException("Invalid Property Number; This Equipment is Already Assigned To a Student.");
+	    }
+
+	    Dictionary<string, object> Student = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
+	    if (blockid != Student["BlockId"]) {
+		    throw new ArgumentException("The Equipment Must Be in The Same Block and Dormitory as Student.");
+	    }
+
+	    if (!doesStudentHaveEquipment(partNumber, socialNumber)) {
+		    throw new ArgumentException("An Equipment of The Same Type is Already Assigned To This Student.");
+	    }
+            Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
+            var StudentId = studentDict["Id"];
+            var RoomId = studentDict["RoomId"];
+            Dictionary<string, object> EquipmentUpdatedValues = new Dictionary<string, object> {
+                { "RoomId", RoomId },
+                { "OwnerId", StudentId }
+            };
+            Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
         }
 
         public static bool exchangeEquipmentBetweenRooms(string propertyNumber, string roomId)
@@ -3141,6 +3162,7 @@ namespace Dormitory
                 ENUserInterFace.equipmentmngmnt();
             }
 	    finally {
+		    Thread.Sleep(3000);
 		    ENUserInterFace.equipmentmngmnt();
 	    }
         }
@@ -3154,27 +3176,22 @@ namespace Dormitory
                 if (ENUserInterFace.checkback(socialid)) ENUserInterFace.equipmentmngmnt();
                 string propertynumber = AnsiConsole.Ask<string>("Property Number of Equipment: ");
                 if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.equipmentmngmnt();
-                bool done = EquipmentManager.assignEquipmentToStudent(propertynumber, socialid);
-                if (done)
-                {
-                    AnsiConsole.MarkupLine("[green]Equipment Assigned Successfully.[/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.equipmentmngmnt();
-                }
-                else
-                {
-                    AnsiConsole.Markup("[red]Assigning Equipment Failed, Please Try Again.");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.equipmentmngmnt();
-                }
-
-            }
-            catch (Exception)
+                EquipmentManager.assignEquipmentToStudent(propertynumber, socialid);
+                AnsiConsole.MarkupLine("[green]Equipment Assigned Successfully.[/]");
+	    }
+	    catch (ArgumentException e)
             {
-                Thread.Sleep(3000);
+                AnsiConsole.Markup($"[red]Assigning Equipment Failed: {e.Message}.");
+                Thread.Sleep(4000);
                 ENUserInterFace.equipmentmngmnt();
             }
-        }
+	    finally
+	    {
+		Thread.Sleep(3000);
+		ENUserInterFace.equipmentmngmnt();
+	    }
+	}
+
         public static void ExchangeEquipmentBetweenRooms()
         {
             try
