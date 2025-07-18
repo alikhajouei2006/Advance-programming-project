@@ -1166,21 +1166,45 @@ namespace Dormitory
             Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
         }
 
-        public static bool exchangeEquipmentBetweenRooms(string propertyNumber, string roomId)
+        public static void exchangeEquipmentBetweenRooms(string propertyNumber, string roomId)
         {
-            try
-            {
-                Dictionary<string, object> ChangedRoomId = new Dictionary<string, object> {
-                    { "RoomId", roomId}
-                };
+	    int blockid = int.Parse(propertyNumber[1]);
+	    string partNumber = propertyNumber.Substring(2, 3);
+	    Dictionary<string, object> Room = Program.db.GetRecordsByField("Rooms", "Id", roomId)[0];
+	    Dictionary<string, object> Equipment = Prorgam.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0];
+	    if (partNumber != "001") {
+		    throw new ArgumentException("You Can't Exchange a Personal Equipment In Here.");
+	    }
 
-                Program.db.UpdateRecord("Equipment", ChangedRoomId, "PropertyNumber", propertyNumber);
-                return true;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
+	    if (blockid != Room["BlockId"]) {
+		    throw new ArgumentException("The Destination Room and Equipment Must Be in The Same Dormitory and Block.");
+	    }
+	    
+	    if (roomId == Equipment["RoomId"]) {
+		    throw new ArgumentException("This Equipment is Already Assigned to This Room.");
+	    }
+
+	    if (!isEquipmentInRoom(partNumber, roomId)) {
+		    throw new ArgumentException("No Equipment of This Type is in The Room to Be Replaced.");
+	    }
+	    
+	    // changing room ID for equipment that is in the room is being replaced
+	    List<Dictionary<string, object>> equipmentInRoom = Program.db.GetRecordsByField("Equipment", "RoomId", roomId);
+	    foreach (var equipment in equipmentInRoom) {
+		    if (equipment["PartNumber"] == partNumber) {
+			    Dictionary<string, object> equipmentChangedRoomId = new Dictionary<string, object> {
+				    {"RoomId", Equipment["RoomId"]}
+			    };
+			    Program.db.UpdateRecord("Equipment", equipmentChangedRoomId, "PropertyNumber", equipment["PropertyNumber"]);
+		    }
+	    }
+
+	    // changing room ID for equipment that is replacing the equipment in room
+            Dictionary<string, object> changedRoomId = new Dictionary<string, object> {
+                { "RoomId", roomId}
+            };
+
+            Program.db.UpdateRecord("Equipment", changedRoomId, "PropertyNumber", propertyNumber);
         }
 
         public static bool changeStudentEquipment(string oldPropertyNumber, string newPropertyNumber, string socialNumber)
@@ -3158,8 +3182,6 @@ namespace Dormitory
             catch (ArgumentException e)
             {
 		AnsiConsole.Markup($"[red]Assigning Equipment Failed: {e.Message}");
-                Thread.Sleep(4000);
-                ENUserInterFace.equipmentmngmnt();
             }
 	    finally {
 		    Thread.Sleep(3000);
@@ -3182,8 +3204,6 @@ namespace Dormitory
 	    catch (ArgumentException e)
             {
                 AnsiConsole.Markup($"[red]Assigning Equipment Failed: {e.Message}.");
-                Thread.Sleep(4000);
-                ENUserInterFace.equipmentmngmnt();
             }
 	    finally
 	    {
@@ -3203,27 +3223,21 @@ namespace Dormitory
                 if (ENUserInterFace.checkback(roomid)) ENUserInterFace.equipmentmngmnt();
                 string propertynumber = AnsiConsole.Ask<string>("Property Number of Equipment: ");
                 if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.equipmentmngmnt();
-                bool done = EquipmentManager.exchangeEquipmentBetweenRooms(propertynumber, roomid);
-                if (done)
-                {
-                    AnsiConsole.MarkupLine("[green]Equipment Moved Successfully.[/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.equipmentmngmnt();
-                }
-                else
-                {
-                    AnsiConsole.Markup("[red]Moving Equipment Failed, Please Try Again.");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.equipmentmngmnt();
-                }
-
+                EquipmentManager.exchangeEquipmentBetweenRooms(propertynumber, roomid);
+                AnsiConsole.MarkupLine("[green]Equipment Moved Successfully.[/]");
+	    }
+            catch (ArgumentException e)
+            {
+                AnsiConsole.Markup($"[red]Moving Equipment Failed: {e.Message}.");
             }
-            catch (Exception)
+
+            finally
             {
                 Thread.Sleep(3000);
                 ENUserInterFace.equipmentmngmnt();
             }
         }
+
         public static void ChangeStudentEquipment()
         {
             try
