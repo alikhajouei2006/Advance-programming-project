@@ -1188,7 +1188,7 @@ namespace Dormitory
 		    throw new ArgumentException("No Equipment of This Type is in The Room to Be Replaced.");
 	    }
 	    
-	    // changing room ID for equipment that is in the room is being replaced
+	    // changing room ID for equipment that is being replaced
 	    List<Dictionary<string, object>> equipmentInRoom = Program.db.GetRecordsByField("Equipment", "RoomId", roomId);
 	    foreach (var equipment in equipmentInRoom) {
 		    if (equipment["PartNumber"] == partNumber) {
@@ -1253,21 +1253,13 @@ namespace Dormitory
             Program.db.UpdateRecord("Equipment", oldEquipmentUpdatedValues, "PropertyNumber", oldPropertyNumber);
         }
 
-        public static bool changeEquipmentCondition(string propertyNumber, Condition condition)
+        public static void changeEquipmentCondition(string propertyNumber, Condition condition)
         {
-            try
-            {
-                Dictionary<string, object> UpdatedCondition = new Dictionary<string, object> {
-                    { "Condition", condition.ToString()}
-                };
+            Dictionary<string, object> UpdatedCondition = new Dictionary<string, object> {
+                { "Condition", condition.ToString()}
+            };
 
-                Program.db.UpdateRecord("Equipment", UpdatedCondition, "PropertyNumber", propertyNumber);
-                return true;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
+            Program.db.UpdateRecord("Equipment", UpdatedCondition, "PropertyNumber", propertyNumber);
         }
 
         public static Condition checkCondition(string propertyNumber)
@@ -1311,29 +1303,22 @@ namespace Dormitory
             }
         }
 
-        public static bool registerRepairRequest(string propertyNumber)
+        public static void registerRepairRequest(string propertyNumber)
         {
-            try
-            {
-                // uncomment the two below comments if you wish to add a field EquipmentId that is a foreign key to Id field in Equipment Table to RepairRequests table
-                RepairRequest req = new RepairRequest(propertyNumber);
-                //int equipmentId = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0]["Id"].ToInt32();
+	    Dictionary<string, object> Equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0];
+	    List<Dictionary<string, object>> repairReq = Program.db.GetRecordsByField("RepairRequests", "PropertyNumber", propertyNumber);
+	    if (Equipment["Condition"].ToLower() != "broken") {
+		    throw new ArgumentException("The Equipment Must Be First Registered As Broken Before Requesting Repair.");
+	    }
 
-                Dictionary<string, object> reqDict = req.ToDictionary();
-                //reqDict.Add("EquipmentId", equipmentId);
-                bool done = changeEquipmentCondition(propertyNumber, Condition.Reparing);
-                if (!done)
-                {
-                    return false;
-                }
+	    if (repairReq.Count != 0 && Equipment["Condition"].ToLower() == "repairing") {
+		    throw new ArgumentException("A Repair Request For This Equipment is At Hand.");
+	    }
 
-                Program.db.InsertRecord("RepairRequests", reqDict);
-                return true;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
+            RepairRequest req = new RepairRequest(propertyNumber);
+            Dictionary<string, object> reqDict = req.ToDictionary();
+            changeEquipmentCondition(propertyNumber, Condition.Reparing);
+            Program.db.InsertRecord("RepairRequests", reqDict);
         }
     }
     public class DormitorySupervisor : Person
@@ -3366,26 +3351,17 @@ namespace Dormitory
                 AnsiConsole.MarkupLine("[blue]Request Repair of an Equipment[/]");
                 string propertynumber = AnsiConsole.Ask<string>("Enter Property Number of Broken Equipment: ");
                 if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.maintenancemngmnt();
-                bool done = EquipmentManager.registerRepairRequest(propertynumber);
-                if (done)
-                {
-                    AnsiConsole.MarkupLine("[green]Request for Repair of Equipment Registered Successfully.[/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.maintenancemngmnt();
-                }
-                else
-                {
-                    AnsiConsole.Markup("[red]Registering Repair Request for Equipment Failed, Please Try Again.");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.maintenancemngmnt();
-                }
-
+                EquipmentManager.registerRepairRequest(propertynumber);
+                AnsiConsole.MarkupLine("[green]Request for Repair of Equipment Registered Successfully.[/]");
             }
-            catch (Exception)
+            catch (ArgumentException e)
             {
-                Thread.Sleep(3000);
-                ENUserInterFace.maintenancemngmnt();
+                AnsiConsole.Markup("[red]Registering Repair Request for Equipment Failed, Please Try Again.");
             }
+	    finally {
+                Thread.Sleep(4000);
+                ENUserInterFace.maintenancemngmnt();
+	    }
         }
         public static void showAllRepairRequests()
         {
