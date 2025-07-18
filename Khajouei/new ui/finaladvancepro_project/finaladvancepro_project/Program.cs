@@ -1207,32 +1207,50 @@ namespace Dormitory
             Program.db.UpdateRecord("Equipment", changedRoomId, "PropertyNumber", propertyNumber);
         }
 
-        public static bool changeStudentEquipment(string oldPropertyNumber, string newPropertyNumber, string socialNumber)
+        public static void changeStudentEquipment(string oldPropertyNumber, string newPropertyNumber, string socialNumber)
         {
-            try
-            {
-                Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
-                var ownerId = studentDict["Id"];
-                var roomId = studentDict["RoomId"];
+	    int newBlockId = int.Parse(newPropertyNumber[1]);
+	    string newPartNumber = newPropertyNumber.Substring(2, 3);
+	    string oldPartNumber = oldPropertyNumber.Substring(2, 3);
 
-                Dictionary<string, object> newEquipmentUpdatedValues = new Dictionary<string, object> {
-                    { "RoomId", roomId},
-                    { "OwnerId", ownerId}
-                };
+	    Dictionary<string, object> newEquipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", newPropertyNumber)[0];  
+	    Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
+	    Dictionary<string, object> oldEquipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", oldPropertyNumber)[0];
+	    if (studentDict["BlockId"] != newBlockId) {
+		    throw new ArgumentException("The New Equipment and Student Must Be in The Same Dormitory and Block.");
+	    }
 
-                Dictionary<string, object> oldEquipmentUpdatedValues = new Dictionary<string, object> {
-                    { "RoomId", DBNull.Value},
-                    { "OwnerId", DBNull.Value}
-                };
+	    if (newPartNumber == "001") {
+		    throw new ArgumentException("You Cannot Assign a Shared Equipment To a Student.");
+	    }
 
-                Program.db.UpdateRecord("Equipment", newEquipmentUpdatedValues, "PropertyNumber", newPropertyNumber);
-                Program.db.UpdateRecord("Equipment", oldEquipmentUpdatedValues, "PropertyNumber", oldPropertyNumber);
-                return true;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
+	    if (newPartNumber != oldPartNumber) {
+		    throw new ArgumentException("The Two Equipment Are Not of The Same Type.");
+	    }
+	    
+	    if (newEquipment["OwnerId"] != -1 && newEquipment["OwnerId"] != DBNull.Value) {
+		    throw new ArgumentException($"The New Equipment Has another Owner with Id: {newEquipment["OwnerId"]}");
+	    }
+
+	    if (oldEquipment["OwnerId"] != studentDict["Id"]) {
+		    throw new ArgumentException("The Old Equipment You Specified Does Not Belong To This Student.");
+	    }
+
+	    var ownerId = studentDict["Id"];
+            var roomId = studentDict["RoomId"];
+
+            Dictionary<string, object> newEquipmentUpdatedValues = new Dictionary<string, object> {
+                { "RoomId", roomId},
+                { "OwnerId", ownerId}
+            };
+
+            Dictionary<string, object> oldEquipmentUpdatedValues = new Dictionary<string, object> {
+                { "RoomId", DBNull.Value},
+                { "OwnerId", DBNull.Value}
+            };
+
+            Program.db.UpdateRecord("Equipment", newEquipmentUpdatedValues, "PropertyNumber", newPropertyNumber);
+            Program.db.UpdateRecord("Equipment", oldEquipmentUpdatedValues, "PropertyNumber", oldPropertyNumber);
         }
 
         public static bool changeEquipmentCondition(string propertyNumber, Condition condition)
@@ -3249,26 +3267,17 @@ namespace Dormitory
                 if (ENUserInterFace.checkback(oldpropertynumber)) ENUserInterFace.equipmentmngmnt();
                 string newpropertynumber = AnsiConsole.Ask<string>("Property Number of Equipment to Replace With The Current Equipment: ");
                 if (ENUserInterFace.checkback(newpropertynumber)) ENUserInterFace.equipmentmngmnt();
-                bool done = EquipmentManager.changeStudentEquipment(oldpropertynumber, newpropertynumber, socialid);
-                if (done)
-                {
-                    AnsiConsole.MarkupLine("[green]Student's Equipment Changed Successfully.[/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.equipmentmngmnt();
-                }
-                else
-                {
-                    AnsiConsole.Markup("[red]Changing Equipment Failed, Please Try Again.");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.equipmentmngmnt();
-                }
-
+                EquipmentManager.changeStudentEquipment(oldpropertynumber, newpropertynumber, socialid);
+                AnsiConsole.MarkupLine("[green]Student's Equipment Changed Successfully.[/]");
             }
-            catch (Exception)
+            catch (ArgumentException e)
             {
-                Thread.Sleep(3000);
-                ENUserInterFace.equipmentmngmnt();
+                AnsiConsole.Markup($"[red]Changing Equipment Failed: {e.Message}.");
             }
+	    finally {
+		Thread.Sleep(3000);
+                ENUserInterFace.equipmentmngmnt();
+	    }
         }
         public static void showAssignedEquipmentToRooms()
         {
