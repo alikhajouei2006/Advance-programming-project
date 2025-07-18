@@ -1077,6 +1077,13 @@ namespace Dormitory
                 return false;
             }
         }
+	
+	public static void checkEquipmentExistence(string propertyNumber) {
+		List<Dictionary<string, object>> Equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber);
+		if (Equipment.Count == 0) {
+			throw new ArgumentException($"Equipment With Property Number {propertyNumber}, Does Not Exist.");
+		}
+	}
 
 	public static bool isEquipmentInRoom(string partNumber, int roomId) {
 		List<Dictionary<string, object>> Equipment = Program.db.GetRecordsByField("Equipment", "PartNumber", partNumber);
@@ -1099,6 +1106,8 @@ namespace Dormitory
         {
 	    int blockid = int.Parse(propertyNumber[1]);
 	    string partNumber = propertyNumber.Substring(2, 3);
+
+	    checkEquipmentExistence(propertyNumber);
 
 	    Dictionary<string, object> Equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0];
 	    if (Equipment["RoomId"] == roomId) {
@@ -1133,6 +1142,8 @@ namespace Dormitory
         {    
 	    int blockid = int.Parse(propertyNumber[1]);
 	    string partNumber = propertyNumber.Substring(2, 3);
+
+	    checkEquipmentExistence(propertyNumber);
 
 	    Dictionary<string, object> Student = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
 	    Dictionary<string, object> Equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0];
@@ -1170,6 +1181,9 @@ namespace Dormitory
         {
 	    int blockid = int.Parse(propertyNumber[1]);
 	    string partNumber = propertyNumber.Substring(2, 3);
+
+	    checkEquipmentExistence(propertyNumber);
+
 	    Dictionary<string, object> Room = Program.db.GetRecordsByField("Rooms", "Id", roomId)[0];
 	    Dictionary<string, object> Equipment = Prorgam.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0];
 	    if (partNumber != "001") {
@@ -1213,6 +1227,9 @@ namespace Dormitory
 	    string newPartNumber = newPropertyNumber.Substring(2, 3);
 	    string oldPartNumber = oldPropertyNumber.Substring(2, 3);
 
+	    checkEquipmentExistence(oldPropertyNumber);
+	    checkEquipmentExistence(newPropertyNumber);
+
 	    Dictionary<string, object> newEquipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", newPropertyNumber)[0];  
 	    Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
 	    Dictionary<string, object> oldEquipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", oldPropertyNumber)[0];
@@ -1255,6 +1272,8 @@ namespace Dormitory
 
         public static void changeEquipmentCondition(string propertyNumber, Condition condition)
         {
+	    checkEquipmentExistence(propertyNumber);
+
 	    Dictionary<string, object> Equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber);
 	    if (Equipment["Condition"].ToLower() == Condition.ToString().ToLower()) {
 		    throw new ArgumentException($"Equipment Condition Already Set To: {Condition.ToString()}");
