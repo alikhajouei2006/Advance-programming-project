@@ -1255,6 +1255,11 @@ namespace Dormitory
 
         public static void changeEquipmentCondition(string propertyNumber, Condition condition)
         {
+	    Dictionary<string, object> Equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber);
+	    if (Equipment["Condition"].ToLower() == Condition.ToString().ToLower()) {
+		    throw new ArgumentException($"Equipment Condition Already Set To: {Condition.ToString()}");
+	    }
+
             Dictionary<string, object> UpdatedCondition = new Dictionary<string, object> {
                 { "Condition", condition.ToString()}
             };
@@ -3833,26 +3838,17 @@ namespace Dormitory
                 AnsiConsole.MarkupLine("[blue]Changing Condition of Equipment to Broken[/]");
                 string propertynumber = AnsiConsole.Ask<string>("Enter Property Number of Broken Equipment: ");
                 if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.maintenancemngmnt();
-                bool done = EquipmentManager.changeEquipmentCondition(propertynumber, Condition.Broken);
-                if (done)
-                {
-                    AnsiConsole.MarkupLine("[green]Equipment's Condition Successfully Changed to Broken.[/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.maintenancemngmnt();
-                }
-                else
-                {
-                    AnsiConsole.Markup("[red]Changing Condition of Equipment to Broken Failed, Please Try Again.");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.maintenancemngmnt();
-                }
-
+                EquipmentManager.changeEquipmentCondition(propertynumber, Condition.Broken);
+                AnsiConsole.MarkupLine("[green]Equipment's Condition Successfully Changed to Broken.[/]");
             }
-            catch (Exception)
+            catch (ArgumentException e)
             {
-                Thread.Sleep(3000);
-                ENUserInterFace.maintenancemngmnt();
+                AnsiConsole.Markup("[red]Changing Condition of Equipment to Broken Failed, Please Try Again.");
             }
+	    finally {
+		    Thread.Sleep(4000);
+		    ENUserInterFace.maintenancemngmngt();
+	    }
         }
         public static void ShowStudentAccommodation()
         {
