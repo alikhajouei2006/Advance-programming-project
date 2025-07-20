@@ -9,6 +9,7 @@ using static System.Console;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using System.Net;
+using System.Text.Encodings;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using Spectre.Console;
@@ -167,8 +168,9 @@ namespace Dormitory
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 Name TEXT NOT NULL UNIQUE,
                 Address TEXT NOT NULL,
-                Capacity INTEGER NOT NULL,
-                Responsible TEXT
+                TotalCapacity INTEGER NOT NULL,
+                Responsible TEXT,
+                RemainingCapacity INTEGER NOT NULL
             );";
 
             string blockSql = @"
@@ -179,6 +181,8 @@ namespace Dormitory
                 Responsible TEXT,
                 NumberOfFloors INTEGER,
                 NumberOfRooms INTEGER,
+                TotalCapacity INTEGER NOT NULL,
+                RemainingCapacity INTEGER NOT NULL,
                 FOREIGN KEY (DormitoryId) REFERENCES Dormitories(Id) ON DELETE SET NULL
             );";
 
@@ -187,7 +191,8 @@ namespace Dormitory
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 BlockId INTEGER NOT NULL,
                 FloorNumber INTEGER NOT NULL,
-                Capacity INTEGER NOT NULL CHECK(Capacity >= 0 AND Capacity <= 6),
+                TotalCapacity INTEGER NOT NULL CHECK(TotalCapacity >= 0 AND TotalCapacity <= 6),
+                RemainingCapacity INTEGER NOT NULL CHECK(RemainingCapacity >= 0 AND RemainingCapacity <= 6),
                 FOREIGN KEY (BlockId) REFERENCES Blocks(Id) ON DELETE CASCADE
             );";
 
@@ -265,7 +270,7 @@ namespace Dormitory
             CREATE TABLE IF NOT EXISTS Equipment (
                 Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 Type TEXT,
-                PartNumber TEXT,
+                PartNumber TEXT UNIQUE NOT NULL,
                 PropertyNumber TEXT,
                 Condition TEXT,
                 RoomId INTEGER,
@@ -281,6 +286,21 @@ namespace Dormitory
 		        Status TEXT
 		    );";
 
+            string studentaccommodationSql = @"
+            CREATE TABLE IF NOT EXISTS StudentAccommodationHistory (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                StudentId INTEGER NOT NULL,
+                DormitoryId INTEGER NOT NULL,
+                BlockId INTEGER NOT NULL,
+                RoomId INTEGER NOT NULL,
+                StartDate TEXT NOT NULL,
+                EndDate TEXT,
+                FOREIGN KEY(StudentId) REFERENCES Students(Id),
+                FOREIGN KEY(DormitoryId) REFERENCES Dormitories(Id) ON DELETE SET NULL,
+                FOREIGN KEY(BlockId) REFERENCES Blocks(Id) ON DELETE SET NULL,
+                FOREIGN KEY(RoomId) REFERENCES Rooms(Id) ON DELETE SET NULL
+            );";
+
             using (var cmd = connection.CreateCommand())
             {
                 cmd.CommandText = "PRAGMA foreign_keys = ON;"; cmd.ExecuteNonQuery();
@@ -295,6 +315,7 @@ namespace Dormitory
                 cmd.CommandText = dormitorySupervisorSql; cmd.ExecuteNonQuery();
                 cmd.CommandText = directorSql; cmd.ExecuteNonQuery();
                 cmd.CommandText = repairrequestSql; cmd.ExecuteNonQuery();
+                cmd.CommandText = studentaccommodationSql; cmd.ExecuteNonQuery();
             }
 
         }
@@ -327,7 +348,7 @@ namespace Dormitory
             ConsoleKeyInfo keyInfo;
             do
             {
-                keyInfo = Console.ReadKey(intercept: true);
+                keyInfo = ReadKey(intercept: true);
             } while (keyInfo.Key != ConsoleKey.Enter);
             ENUserInterFace.mainMenu();
         }
@@ -509,7 +530,7 @@ namespace Dormitory
                 int id = Convert.ToInt32(r["Id"]);
                 string marker = (currentRoomId.HasValue && currentRoomId.Value == id) ? "*" : "";
                 string floor = r["FloorNumber"].ToString();
-                string cap = r["Capacity"].ToString();
+                string cap = r["RemainingCapacity"].ToString();
                 roomTable.AddRow($"{marker}{id}", floor, cap);
             }
 
@@ -614,11 +635,53 @@ namespace Dormitory
         {
             try
             {
+                var studentRecord = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
+
+     
+                string roomId = studentRecord["RoomId"] != DBNull.Value ? studentRecord["RoomId"].ToString() : null;
+                string dormitoryId = studentRecord["DormitoryId"] != DBNull.Value ? studentRecord["DormitoryId"].ToString() : null;
+                string blockId = studentRecord["BlockId"] != DBNull.Value ? studentRecord["BlockId"].ToString() : null;
+
+                if (!string.IsNullOrEmpty(roomId))
+                {
+                    var room = Program.db.GetRecordsByField("Rooms", "Id", roomId)[0];
+                    int cap = int.Parse(room["RemainingCapacity"].ToString());
+                    cap++;
+                    Program.db.UpdateRecord("Rooms", new Dictionary<string, object>
+                    {
+                        {"RemainingCapacity", cap}
+                    }, "Id", roomId);
+                        }
+
+                if (!string.IsNullOrEmpty(blockId))
+                {
+                    var block = Program.db.GetRecordsByField("Blocks", "Id", blockId)[0];
+                    int blockRem = int.Parse(block["RemainingCapacity"].ToString());
+                    blockRem++;
+                    Program.db.UpdateRecord("Blocks", new Dictionary<string, object>
+                    {
+                        {"RemainingCapacity", blockRem}
+                    }, "Id", blockId);
+                        }
+
+                if (!string.IsNullOrEmpty(dormitoryId))
+                {
+                    var dorm = Program.db.GetRecordsByField("Dormitories", "Id", dormitoryId)[0];
+                    int dormRem = int.Parse(dorm["RemainingCapacity"].ToString());
+                    dormRem++;
+                    Program.db.UpdateRecord("Dormitories", new Dictionary<string, object>
+                    {
+                        {"RemainingCapacity", dormRem}
+                    }, "Id", dormitoryId);
+                        }
+
+    
                 Program.db.DeleteRecord("Students", "SocialNumber", socialNumber);
                 return true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Console.WriteLine(ex.ToString());
                 return false;
             }
         }
@@ -662,40 +725,88 @@ namespace Dormitory
             { return false; }
             
         }
-        public static bool ChangeDoirmiBlckRoom(string socialNumber,string dormitoryId, string blockId, string roomIdChosen)
+        public static bool ChangeDoirmiBlckRoom(string socialNumber, string dormitoryId, string blockId, string roomIdChosen)
         {
             try
             {
+                
                 var studentRecord = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
+                StudentAccommodationHistory.CloseCurrentAccommodation(int.Parse(studentRecord["Id"].ToString()));
                 string currentRoomId = studentRecord["RoomId"] != DBNull.Value ? studentRecord["RoomId"].ToString() : null;
+                string currentDormitoryId = studentRecord["DormitoryId"] != DBNull.Value ? studentRecord["DormitoryId"].ToString() : null;
+                string currentBlockId = studentRecord["BlockId"] != DBNull.Value ? studentRecord["BlockId"].ToString() : null;
+
                 if (!string.IsNullOrEmpty(currentRoomId))
                 {
                     var oldRoom = Program.db.GetRecordsByField("Rooms", "Id", currentRoomId)[0];
-                    int oldCap = int.Parse(oldRoom["Capacity"].ToString());
+                    int oldCap = int.Parse(oldRoom["RemainingCapacity"].ToString());
                     oldCap++;
-
                     Program.db.UpdateRecord("Rooms", new Dictionary<string, object>
                     {
-                        {"Capacity", oldCap}
+                        { "RemainingCapacity", oldCap }
                     }, "Id", currentRoomId);
                         }
 
-                var newRoom = Program.db.GetRecordsByField("Rooms", "Id", roomIdChosen)[0];
-                int newCap = int.Parse(newRoom["Capacity"].ToString());
-                newCap--;
+                if (!string.IsNullOrEmpty(currentBlockId))
+                {
+                    var oldBlock = Program.db.GetRecordsByField("Blocks", "Id", currentBlockId)[0];
+                    int oldCap = int.Parse(oldBlock["RemainingCapacity"].ToString());
+                    oldCap++;
+                    Program.db.UpdateRecord("Blocks", new Dictionary<string, object>
+                    {
+                        { "RemainingCapacity", oldCap }
+                    }, "Id", currentBlockId);
+                        }
 
+                if (!string.IsNullOrEmpty(currentDormitoryId))
+                {
+                    var oldDorm = Program.db.GetRecordsByField("Dormitories", "Id", currentDormitoryId)[0];
+                    int oldCap = int.Parse(oldDorm["RemainingCapacity"].ToString());
+                    oldCap++;
+                    Program.db.UpdateRecord("Dormitories", new Dictionary<string, object>
+                    {
+                        { "RemainingCapacity", oldCap }
+                    }, "Id", currentDormitoryId);
+                        }
+
+                var newRoom = Program.db.GetRecordsByField("Rooms", "Id", roomIdChosen)[0];
+                int newCap = int.Parse(newRoom["RemainingCapacity"].ToString());
+                newCap--;
                 Program.db.UpdateRecord("Rooms", new Dictionary<string, object>
                 {
-                    {"Capacity", newCap}
+                    { "RemainingCapacity", newCap }
                 }, "Id", roomIdChosen);
 
-   
+                var newBlock = Program.db.GetRecordsByField("Blocks", "Id", blockId)[0];
+                int newBlockCap = int.Parse(newBlock["RemainingCapacity"].ToString());
+                newBlockCap--;
+                Program.db.UpdateRecord("Blocks", new Dictionary<string, object>
+                {
+                    { "RemainingCapacity", newBlockCap }
+                }, "Id", blockId);
+
+                var newDorm = Program.db.GetRecordsByField("Dormitories", "Id", dormitoryId)[0];
+                int newDormCap = int.Parse(newDorm["RemainingCapacity"].ToString());
+                newDormCap--;
+                Program.db.UpdateRecord("Dormitories", new Dictionary<string, object>
+                {
+                    { "RemainingCapacity", newDormCap }
+                }, "Id", dormitoryId);
+
                 Program.db.UpdateRecord("Students", new Dictionary<string, object>
                 {
-                    {"DormitoryId", dormitoryId},
-                    {"BlockId", blockId},
-                    {"RoomId", roomIdChosen}
+                    { "DormitoryId", dormitoryId },
+                    { "BlockId", blockId },
+                    { "RoomId", roomIdChosen }
                 }, "SocialNumber", socialNumber);
+
+                
+                StudentAccommodationHistory.AddAccommodationHistory(
+                    int.Parse(studentRecord["Id"].ToString()),
+                    int.Parse(dormitoryId),
+                    int.Parse(blockId),
+                    int.Parse(roomIdChosen)
+                );
 
                 return true;
             }
@@ -708,7 +819,8 @@ namespace Dormitory
         public static bool assignStudentToAccommodation(string SocialNumber, int dormitoryId, int blockId, int roomId)
         {
             try 
-            { 
+            {
+                var student = Program.db.GetRecordsByField("Students", "SocialNumber", SocialNumber)[0];
                 var accommodationinfo = new Dictionary<string, object>
                 {
                     {"DormitoryId", dormitoryId},
@@ -716,13 +828,28 @@ namespace Dormitory
                     {"RoomId", roomId }
                 };
                 var room = Program.db.GetRecordsByField("Rooms", "Id", roomId)[0];
-                int cap = int.Parse(room["Capacity"].ToString());
+                int cap = int.Parse(room["RemainingCapacity"].ToString());
                 Program.db.UpdateRecord("Students", accommodationinfo, "SocialNumber", SocialNumber);
-                var updatecap = new Dictionary<string, object>
+                var updatecaproom = new Dictionary<string, object>
                 {
-                    {"Capacity", --cap }
+                    {"RemainingCapacity", --cap }
                 };
-                Program.db.UpdateRecord("Rooms", updatecap, "Id", roomId);
+                Program.db.UpdateRecord("Rooms", updatecaproom, "Id", roomId);
+                var dorm = Program.db.GetRecordsByField("Dormitories", "Id", dormitoryId)[0];
+                var dormcap = int.Parse(dorm["RemainingCapacity"].ToString());
+                var updatedormitory = new Dictionary<string, object>
+                {
+                    {"RemainingCapacity", --dormcap}
+                };
+                Program.db.UpdateRecord("Dormitories", updatedormitory, "Id", dormitoryId);
+                var block = Program.db.GetRecordsByField("Blocks", "Id", blockId)[0];
+                var blockcap = int.Parse(block["RemainingCapacity"].ToString());
+                var updateblock= new Dictionary<string, object>
+                {
+                    {"RemainingCapacity", --blockcap}
+                };
+                Program.db.UpdateRecord("Blocks", updateblock, "Id", blockId);
+                StudentAccommodationHistory.AddAccommodationHistory(int.Parse(student["Id"].ToString()), dormitoryId, blockId, roomId);
                 return true;
             }
             catch (Exception)
@@ -737,16 +864,15 @@ namespace Dormitory
         public string _name;
         public string _address { get; set; }
         public string _responsible { get; set; }
-
-        private List<string> _blocks = new List<string>();
-        public int _capacity { get; set; }
+        public int _Totalcapacity { get; set; }
+        public int _remainingCapacity { get; set; }
         public Dormitory(string name, string address, int capcity, string responsible, string block = null)
         {
             _name = name;
             _address = address;
-            _capacity = capcity;
+            _Totalcapacity = capcity;
+            _remainingCapacity = capcity;
             _responsible = responsible;
-            _blocks.Add(block);
         }
 
     }
@@ -762,8 +888,9 @@ namespace Dormitory
             {
                 { "Name",dormitory._name},
                 { "Address",dormitory._address},
-                { "Capacity",dormitory._capacity},
+                { "TotalCapacity",dormitory._Totalcapacity},
                 { "Responsible",dormitory._responsible},
+                { "RemainingCapacity",dormitory._remainingCapacity }
             };
             return info;
         }
@@ -774,7 +901,7 @@ namespace Dormitory
 
                 var dormitory = new Dormitory(FullName, Address, capcity, responsible);
 
-                Program.db.InsertRecord("Dormitories", DormitoryManager.ToDictionary(dormitory));
+                Program.db.InsertRecord("Dormitories", ToDictionary(dormitory));
                 var updatedormid = new Dictionary<string, object>
                 {
                     {"DormitoryId", Program.db.GetRecordsByField("Dormitories","Name",FullName)[0]["Id"]}
@@ -842,15 +969,18 @@ namespace Dormitory
         public string _dormitoryId { get; set; }
         public int _NO_floors { get; set; }
         public int _NO_rooms { get; set; }
-        private List<string> _rooms { get; set; }
-        public Block(string dormitory, string name, int floor, int room, string responsible, List<string> rooms = null)
+        public int _totalCapacity {  get; set; }
+        public int _remainingCapacity { get; set; }
+        public Block(string dormitory, string name, int floor, int room, string responsible, int capacity)
         {
             _dormitoryId = dormitory;
             _name = name;
             _NO_floors = floor;
             _NO_rooms = room;
             _responsible = responsible;
-            _rooms = rooms;
+            _totalCapacity = capacity;
+            _remainingCapacity = capacity;
+            
         }
     }
     class BlocksManager
@@ -863,29 +993,39 @@ namespace Dormitory
         {
             Dictionary<string, object> info = new Dictionary<string, object>
             {
-                {"DormitoryId",block._dormitoryId},
+                { "DormitoryId",block._dormitoryId},
                 { "Name",block._name},
                 { "NumberOfFloors",block._NO_floors},
-                {"NumberOfRooms",block._NO_rooms },
-                {"Responsible",block._responsible},
+                { "NumberOfRooms",block._NO_rooms },
+                { "Responsible",block._responsible},
+                { "TotalCapacity", block._totalCapacity},
+                { "RemainingCapacity", block._remainingCapacity}
             };
             return info;
         }
-        public static bool AddBlock(string dormiId, string name, string floor, string room, string resposible)
+        public static bool AddBlock(string dormiId, string name, string floor, string room, string resposible, int capacity)
         {
             try
             {
-                Block block = new Block(dormiId, name, int.Parse(floor), int.Parse(room), resposible);
-                Program.db.InsertRecord("Blocks", BlocksManager.ToDictionary(block));
+                Block block = new Block(dormiId, name, int.Parse(floor), int.Parse(room), resposible, capacity);
+                Program.db.InsertRecord("Blocks", ToDictionary(block));
+
                 string blockid = Program.db.GetRecordsByField("Blocks", "Name", name)[0]["Id"].ToString();
-                int capforeachfloor = int.Parse(room)/int.Parse(floor);
-                int j = 1;
-                for (int i = 0; i < int.Parse(room); i++)
+                int totalFloors = int.Parse(floor);
+                int totalRooms = int.Parse(room);
+
+                for (int i = 1; i <= totalRooms; i++)
                 {
-                    if (i % capforeachfloor == 0) j++;
-                    Room rooms = new Room(j, blockid);
-                    Program.db.InsertRecord("Rooms",rooms.ToDictionary());
+                    int floorNumber = (i - 1) * totalFloors / totalRooms + 1;
+                    Room roomObj = new Room(floorNumber, blockid);
+                    Program.db.InsertRecord("Rooms", roomObj.ToDictionary());
                 }
+                var dormitory = Program.db.GetRecordsByField("Dormitories", "Id", dormiId)[0];
+                var update = new Dictionary<string, object>
+                {
+                    { "RemainingCapacity", int.Parse(dormitory["RemainingCapacity"].ToString())- int.Parse(capacity.ToString())}
+                };
+                Program.db.UpdateRecord("Dormitories", update, "Id", dormiId);
                 return true;
             }
             catch (Exception ex)
@@ -959,8 +1099,9 @@ namespace Dormitory
             var info = new Dictionary<string, object>
             {
                 {"BlockId",int.Parse(_block) },
-                {"Capacity",_capacity},
-                {"FloorNumber",_NO_floors }
+                {"TotalCapacity",_capacity},
+                {"FloorNumber",_NO_floors },
+                { "RemainingCapacity", _capacity}
             };
             return info;
         }
@@ -995,6 +1136,8 @@ namespace Dormitory
             _BlockId = blockid;
             _DormId = dormid;
             _RoomId = -1;
+            partNumber = "";
+            propertyNumber = "";
         }
 
         public string partNumber
@@ -1078,104 +1221,246 @@ namespace Dormitory
             }
         }
 
-        public static bool assignEquipmentToRoom(string propertyNumber, string RoomId)
+        public static void checkEquipmentExistence(string propertyNumber)
         {
-            try
+            List<Dictionary<string, object>> Equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber);
+            if (Equipment.Count == 0)
             {
-                Dictionary<string, object> EquipmentUpdatedValues = new Dictionary<string, object>
-                    {
-                    {"RoomId", RoomId}
-                };
-                Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
-                return true;
-            }
-            catch (Exception)
-            {
-                return false;
+                throw new ArgumentException($"Equipment With Property Number {propertyNumber}, Does Not Exist.");
             }
         }
 
-        public static bool assignEquipmentToStudent(string propertyNumber, string socialNumber)
+        public static bool isEquipmentInRoom(string partNumber, int roomId)
         {
-            try
+            List<Dictionary<string, object>> Equipment = Program.db.GetRecordsByField("Equipment", "PartNumber", partNumber);
+            foreach (var equipment in Equipment)
             {
-
-                Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
-                var StudentId = studentDict["Id"];
-                var RoomId = studentDict["RoomId"];
-                Dictionary<string, object> EquipmentUpdatedValues = new Dictionary<string, object> {
-                    { "RoomId", RoomId },
-                    { "OwnerId", StudentId }
-                };
-                Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
-                return true;
+                if (int.Parse(equipment["RoomId"].ToString()) == roomId) return true;
             }
-            catch (Exception)
-            {
-                return false;
-            }
+            return false;
         }
 
-        public static bool exchangeEquipmentBetweenRooms(string propertyNumber, string roomId)
+        public static bool doesStudentHaveEquipment(string partNumber, string socialNumber)
         {
-            try
+            int studentId = int.Parse(Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0]["Id"].ToString());
+            List<Dictionary<string, object>> Equipment = Program.db.GetRecordsByField("Equipment", "PartNumber", partNumber);
+            foreach (var equipment in Equipment)
             {
-                Dictionary<string, object> ChangedRoomId = new Dictionary<string, object> {
-                    { "RoomId", roomId}
-                };
-
-                Program.db.UpdateRecord("Equipment", ChangedRoomId, "PropertyNumber", propertyNumber);
-                return true;
+                if (int.Parse(equipment["OwnerId"].ToString()) == studentId) return true;
             }
-            catch (Exception)
-            {
-                return false;
-            }
+            return false;
         }
 
-        public static bool changeStudentEquipment(string oldPropertyNumber, string newPropertyNumber, string socialNumber)
+        public static void assignEquipmentToRoom(string propertyNumber, string roomId)
         {
-            try
+            int blockid = int.Parse(propertyNumber[1].ToString());
+            string partNumber = propertyNumber.Substring(2, 3);
+
+            checkEquipmentExistence(propertyNumber);
+
+            Dictionary<string, object> Equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0];
+            string roomid = Equipment["RoomId"].ToString();
+            WriteLine($"roomid : {roomid}, {roomId}");
+            if (!string.IsNullOrEmpty(roomid))
             {
-                Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
-                var ownerId = studentDict["Id"];
-                var roomId = studentDict["RoomId"];
+                if (roomid == roomId.ToString())
+                {
+                    throw new ArgumentException("Equipment Already Assigned to This Room.");
+                }
 
-                Dictionary<string, object> newEquipmentUpdatedValues = new Dictionary<string, object> {
-                    { "RoomId", roomId},
-                    { "OwnerId", ownerId}
-                };
+                if (int.Parse(roomid) != -1 && Equipment["RoomId"] != DBNull.Value)
+                {
+                    throw new ArgumentException("Invalid Property Number; This Equipment is Already Assigned To a Room.");
+                }
 
-                Dictionary<string, object> oldEquipmentUpdatedValues = new Dictionary<string, object> {
-                    { "RoomId", DBNull.Value},
-                    { "OwnerId", DBNull.Value}
-                };
+                if (partNumber != "001")
+                {
+                    throw new ArgumentException("Invalid Property Number; Cannot Add a Personal Equipment To a Room Directly.");
+                }
 
-                Program.db.UpdateRecord("Equipment", newEquipmentUpdatedValues, "PropertyNumber", newPropertyNumber);
-                Program.db.UpdateRecord("Equipment", oldEquipmentUpdatedValues, "PropertyNumber", oldPropertyNumber);
-                return true;
+                Dictionary<string, object> Room = Program.db.GetRecordsByField("Rooms", "Id", roomId)[0];
+                if (blockid != int.Parse(Room["BlockId"].ToString()))
+                {
+                    throw new ArgumentException("The Room and The Equipment Must Be in The Same Dormitory and Block.");
+                }
+
+                if (!isEquipmentInRoom(partNumber, int.Parse(roomId)))
+                {
+                    throw new ArgumentException("An Equipment of The Same Type Already Exists in This Room.");
+                }
             }
-            catch (Exception)
+            Dictionary<string, object> EquipmentUpdatedValues = new Dictionary<string, object>
             {
-                return false;
-            }
+            {"RoomId", roomId}
+            };
+            Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
         }
 
-        public static bool changeEquipmentCondition(string propertyNumber, Condition condition)
+        public static void assignEquipmentToStudent(string propertyNumber, string socialNumber)
         {
-            try
-            {
-                Dictionary<string, object> UpdatedCondition = new Dictionary<string, object> {
-                    { "Condition", condition.ToString()}
-                };
+            int blockid = int.Parse(propertyNumber[1].ToString());
+            string partNumber = propertyNumber.Substring(2, 3);
 
-                Program.db.UpdateRecord("Equipment", UpdatedCondition, "PropertyNumber", propertyNumber);
-                return true;
-            }
-            catch (Exception)
+            checkEquipmentExistence(propertyNumber);
+
+            Dictionary<string, object> Student = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
+            Dictionary<string, object> Equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0];
+            if (Equipment["OwnerId"].ToString() != "")
             {
-                return false;
+                throw new ArgumentException("Equipment Already Assigned to This Student.");
             }
+
+            if (partNumber == "001")
+            {
+                throw new ArgumentException("Invalid Property Number; Cannot Assign a Shared Equipment To a Single Person.");
+            }
+            object ownerid = Equipment["OwnerId"];
+            WriteLine($"owner id : {ownerid}");
+            if (!string.IsNullOrEmpty(ownerid.ToString()))
+            {
+                if (int.Parse(ownerid.ToString()) != -1 && ownerid != DBNull.Value)
+                {
+                    throw new ArgumentException("Invalid Property Number; This Equipment is Already Assigned To a Student.");
+                }
+                if (blockid != int.Parse(Student["BlockId"].ToString()))
+                {
+                    throw new ArgumentException("The Equipment Must Be in The Same Block and Dormitory as Student.");
+                }
+
+                if (!doesStudentHaveEquipment(partNumber, socialNumber))
+                {
+                    throw new ArgumentException("An Equipment of The Same Type is Already Assigned To This Student.");
+                }
+            }
+            Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
+            var StudentId = studentDict["Id"];
+            var RoomId = studentDict["RoomId"];
+            Dictionary<string, object> EquipmentUpdatedValues = new Dictionary<string, object> {
+                { "RoomId", RoomId },
+                { "OwnerId", StudentId }
+            };
+            Program.db.UpdateRecord("Equipment", EquipmentUpdatedValues, "PropertyNumber", propertyNumber);
+        }
+
+        public static void exchangeEquipmentBetweenRooms(string propertyNumber, string roomId)
+        {
+            int blockid = int.Parse(propertyNumber[1].ToString());
+            string partNumber = propertyNumber.Substring(2, 3);
+
+            checkEquipmentExistence(propertyNumber);
+
+            Dictionary<string, object> Room = Program.db.GetRecordsByField("Rooms", "Id", roomId)[0];
+            Dictionary<string, object> Equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0];
+            if (partNumber != "001")
+            {
+                throw new ArgumentException("You Can't Exchange a Personal Equipment In Here.");
+            }
+
+            if (blockid != int.Parse(Room["BlockId"].ToString()))
+            {
+                throw new ArgumentException("The Destination Room and Equipment Must Be in The Same Dormitory and Block.");
+            }
+
+            if (roomId == Equipment["RoomId"].ToString())
+            {
+                throw new ArgumentException("This Equipment is Already Assigned to This Room.");
+            }
+
+            if (!isEquipmentInRoom(partNumber, int.Parse(roomId)))
+            {
+                throw new ArgumentException("No Equipment of This Type is in The Room to Be Replaced.");
+            }
+
+            // changing room ID for equipment that is being replaced
+            List<Dictionary<string, object>> equipmentInRoom = Program.db.GetRecordsByField("Equipment", "RoomId", roomId);
+            foreach (var equipment in equipmentInRoom)
+            {
+                if (equipment["PartNumber"].ToString() == partNumber)
+                {
+                    Dictionary<string, object> equipmentChangedRoomId = new Dictionary<string, object> {
+                    {"RoomId", Equipment["RoomId"]}
+                };
+                    Program.db.UpdateRecord("Equipment", equipmentChangedRoomId, "PropertyNumber", equipment["PropertyNumber"]);
+                }
+            }
+
+            // changing room ID for equipment that is replacing the equipment in room
+            Dictionary<string, object> changedRoomId = new Dictionary<string, object> {
+                { "RoomId", roomId}
+            };
+
+            Program.db.UpdateRecord("Equipment", changedRoomId, "PropertyNumber", propertyNumber);
+        }
+
+        public static void changeStudentEquipment(string oldPropertyNumber, string newPropertyNumber, string socialNumber)
+        {
+            int newBlockId = int.Parse(newPropertyNumber[1].ToString());
+            string newPartNumber = newPropertyNumber.Substring(2, 3);
+            string oldPartNumber = oldPropertyNumber.Substring(2, 3);
+
+            checkEquipmentExistence(oldPropertyNumber);
+            checkEquipmentExistence(newPropertyNumber);
+
+            Dictionary<string, object> newEquipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", newPropertyNumber)[0];
+            Dictionary<string, object> studentDict = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumber)[0];
+            Dictionary<string, object> oldEquipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", oldPropertyNumber)[0];
+            if (studentDict["BlockId"].ToString() != newBlockId.ToString())
+            {
+                throw new ArgumentException("The New Equipment and Student Must Be in The Same Dormitory and Block.");
+            }
+
+            if (newPartNumber == "001")
+            {
+                throw new ArgumentException("You Cannot Assign a Shared Equipment To a Student.");
+            }
+
+            if (newPartNumber != oldPartNumber)
+            {
+                throw new ArgumentException("The Two Equipment Are Not of The Same Type.");
+            }
+
+            if (int.Parse(newEquipment["OwnerId"].ToString()) != -1 && newEquipment["OwnerId"] != DBNull.Value)
+            {
+                throw new ArgumentException($"The New Equipment Has another Owner with Id: {newEquipment["OwnerId"]}");
+            }
+
+            if (oldEquipment["OwnerId"] != studentDict["Id"])
+            {
+                throw new ArgumentException("The Old Equipment You Specified Does Not Belong To This Student.");
+            }
+
+            var ownerId = studentDict["Id"];
+            var roomId = studentDict["RoomId"];
+
+            Dictionary<string, object> newEquipmentUpdatedValues = new Dictionary<string, object> {
+                { "RoomId", roomId},
+                { "OwnerId", ownerId}
+            };
+
+            Dictionary<string, object> oldEquipmentUpdatedValues = new Dictionary<string, object> {
+                { "RoomId", DBNull.Value},
+                { "OwnerId", DBNull.Value}
+            };
+
+            Program.db.UpdateRecord("Equipment", newEquipmentUpdatedValues, "PropertyNumber", newPropertyNumber);
+            Program.db.UpdateRecord("Equipment", oldEquipmentUpdatedValues, "PropertyNumber", oldPropertyNumber);
+        }
+
+        public static void changeEquipmentCondition(string propertyNumber, Condition condition)
+        {
+            checkEquipmentExistence(propertyNumber);
+
+            Dictionary<string, object> Equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0];
+            if (Equipment["Condition"].ToString().ToLower() == condition.ToString().ToLower())
+            {
+                throw new ArgumentException($"Equipment Condition Already Set To: {condition.ToString()}");
+            }
+
+            Dictionary<string, object> UpdatedCondition = new Dictionary<string, object> {
+                { "Condition", condition.ToString()}
+            };
+
+            Program.db.UpdateRecord("Equipment", UpdatedCondition, "PropertyNumber", propertyNumber);
         }
 
         public static Condition checkCondition(string propertyNumber)
@@ -1219,29 +1504,24 @@ namespace Dormitory
             }
         }
 
-        public static bool registerRepairRequest(string propertyNumber)
+        public static void registerRepairRequest(string propertyNumber)
         {
-            try
+            Dictionary<string, object> Equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0];
+            List<Dictionary<string, object>> repairReq = Program.db.GetRecordsByField("RepairRequests", "PropertyNumber", propertyNumber);
+            if (Equipment["Condition"].ToString().ToLower() != "broken")
             {
-                // uncomment the two below comments if you wish to add a field EquipmentId that is a foreign key to Id field in Equipment Table to RepairRequests table
-                RepairRequest req = new RepairRequest(propertyNumber);
-                //int equipmentId = Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0]["Id"].ToInt32();
-
-                Dictionary<string, object> reqDict = req.ToDictionary();
-                //reqDict.Add("EquipmentId", equipmentId);
-                bool done = changeEquipmentCondition(propertyNumber, Condition.Reparing);
-                if (!done)
-                {
-                    return false;
-                }
-
-                Program.db.InsertRecord("RepairRequests", reqDict);
-                return true;
+                throw new ArgumentException("The Equipment Must Be First Registered As Broken Before Requesting Repair.");
             }
-            catch (Exception)
+
+            if (repairReq.Count != 0 && Equipment["Condition"].ToString().ToLower() == "repairing")
             {
-                return false;
+                throw new ArgumentException("A Repair Request For This Equipment is At Hand.");
             }
+
+            RepairRequest req = new RepairRequest(propertyNumber);
+            Dictionary<string, object> reqDict = req.ToDictionary();
+            changeEquipmentCondition(propertyNumber, Condition.Reparing);
+            Program.db.InsertRecord("RepairRequests", reqDict);
         }
     }
     public class DormitorySupervisor : Person
@@ -1338,18 +1618,18 @@ namespace Dormitory
         public string Studentid { get; set; }
         
 
-        public DormitoryBlockSupervisor(string fullName, string socialNumber, string phoneNumber, string address, string role, string blockUnderResponsibility=null) : base(fullName, socialNumber, phoneNumber, address)
+        public DormitoryBlockSupervisor(string fullName, string socialNumber, string phoneNumber, string address, string role) : base(fullName, socialNumber, phoneNumber, address)
         {
-            Studentid = null;
+            Studentid = "";
             Role = role;
-            BlockUnderResponsibility = null;
+            BlockUnderResponsibility = "";
         }
 
-        public DormitoryBlockSupervisor(string fullName, string socialNumber, string phoneNumber, string address, string studentid , string role, string blockUnderResponsibility=null) : base(fullName, socialNumber, phoneNumber, address)
+        public DormitoryBlockSupervisor(string fullName, string socialNumber, string phoneNumber, string address, string studentid , string role) : base(fullName, socialNumber, phoneNumber, address)
         {
             Studentid = studentid;
             Role = role;
-            BlockUnderResponsibility = null;
+            BlockUnderResponsibility = "";
         }
 
     }
@@ -1363,8 +1643,8 @@ namespace Dormitory
                 {"SocialNumber", blocksupervisor._socialNumber},
                 {"PhoneNumber", blocksupervisor._phoneNumber},
                 {"Address", blocksupervisor._address},
-                {"StudentId",blocksupervisor.Studentid == null ? DBNull.Value : int.Parse(blocksupervisor.Studentid)},
-                {"BlockId", blocksupervisor.BlockUnderResponsibility},
+                {"StudentId",blocksupervisor.Studentid == "" ? DBNull.Value : int.Parse(blocksupervisor.Studentid)},
+                {"BlockId", blocksupervisor.BlockUnderResponsibility == "" ? DBNull.Value : int.Parse(blocksupervisor.BlockUnderResponsibility)},
                 {"Role", blocksupervisor.Role}
             };
             return values;
@@ -1384,7 +1664,7 @@ namespace Dormitory
                     }
                     else
                     {
-                        return "Student Exists But SocialNumber Is Not For a Student";
+                        return "Student Exists But Role Is Not For a Student";
                     }
 
                 }
@@ -1399,8 +1679,9 @@ namespace Dormitory
                     return "success";
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                WriteLine(ex.ToString());
                 return "unsucess";
             }
         }
@@ -1457,19 +1738,7 @@ namespace Dormitory
         {
             try
             {
-                Program.ShowStudentAccommodation();
-            }
-            catch (Exception)
-            {
-                ENUserInterFace.reporting();
-            }
-        }
-        public static void ShowFullAndEmptyRoom()
-        {
-            try
-            {
-                Program.showFullRooms();
-                Program.showEmptyRooms();
+                Program.showStudentAccommodation();
             }
             catch (Exception)
             {
@@ -1480,7 +1749,7 @@ namespace Dormitory
         {
             try
             {
-                Program.ShowRemainingCapacity();
+                Program.showRemainingCapacity();
             }
             catch (Exception)
             {
@@ -1514,17 +1783,6 @@ namespace Dormitory
             try
             {
                 Program.showAllEquipmentAssignedToEachStudent();
-            }
-            catch (Exception)
-            {
-                ENUserInterFace.reporting();
-            }
-        }
-        public static void ShowAllDefectiveAndInrepairEquipment()
-        {
-            try
-            {
-                Program.showAllDefectiveAndInrepairEquipment();
             }
             catch (Exception)
             {
@@ -1707,7 +1965,7 @@ namespace Dormitory
             int checkdigit = socialNumber[9] - '0';
             return (remainder < 2 && checkdigit == remainder) || (remainder >= 2 && checkdigit == (11 - remainder));
         }
-        public static string ReadPasswordWithToggleSpectre()
+        public static string ReadPasswordWithToggleSpectre(bool re = true)
         {
             var password = new StringBuilder();
             bool showPassword = false;
@@ -1715,270 +1973,540 @@ namespace Dormitory
 
             AnsiConsole.MarkupLine("[yellow]Enter your password (press [green]F2[/] to toggle visibility):[/]");
 
-            Console.Write("Password: ");
+            void RenderPrompt()
+            {
+                if (re)
+                    AnsiConsole.Markup("[cyan]Password : [/]");
+                else
+                    AnsiConsole.Markup("[cyan]Confirm Password : [/]");
+            }
+
+            RenderPrompt();
 
             while (true)
             {
-                key = Console.ReadKey(intercept: true);
+                key = ReadKey(intercept: true);
 
                 if (key.Key == ConsoleKey.Enter)
                 {
-                    Console.WriteLine();
+                    WriteLine();
                     break;
                 }
                 else if (key.Key == ConsoleKey.F2)
                 {
                     showPassword = !showPassword;
 
-                    Console.Write("\rPassword: ");
+                    Write("\r");
+
+                    int promptLength = (re ? "Password : ".Length : "Confirm Password : ".Length) + 10 + password.Length;
+
+                    Write(new string(' ', promptLength));
+                    Write("\r");
+
+                    RenderPrompt();
+
                     if (showPassword)
-                        Console.Write(password.ToString());
+                        Write(password.ToString());
                     else
-                        Console.Write(new string('*', password.Length));
+                        Write(new string('*', password.Length));
                 }
                 else if (key.Key == ConsoleKey.Backspace && password.Length > 0)
                 {
                     password.Length--;
-                    Console.Write("\b \b");
+
+                    Write("\b \b");
                 }
                 else if (!char.IsControl(key.KeyChar))
                 {
                     password.Append(key.KeyChar);
                     if (showPassword)
-                        Console.Write(key.KeyChar);
+                        Write(key.KeyChar);
                     else
-                        Console.Write("*");
+                        Write("*");
                 }
             }
 
             return password.ToString();
         }
     }
+    public class StudentAccommodationHistory
+    {
+        public int Id { get; set; }
+        public int StudentId { get; set; }
+        public int DormitoryId { get; set; }
+        public int BlockId { get; set; }
+        public int RoomId { get; set; }
+        public string StartDate { get; set; }
+        public string EndDate { get; set; }
+        public StudentAccommodationHistory(int studentId, int dormitoryId, int blockId, int roomId, string startDate, string endDate = null)
+        {
+            StudentId = studentId;
+            DormitoryId = dormitoryId;
+            BlockId = blockId;
+            RoomId = roomId;
+            StartDate = startDate;
+            EndDate = endDate;
+        }
+        public StudentAccommodationHistory() { }
+
+        public static void AddAccommodationHistory(int studentId, int dormitoryId, int blockId, int roomId)
+        {
+            var record = new Dictionary<string, object>
+            {
+                {"StudentId", studentId},
+                {"DormitoryId", dormitoryId},
+                {"BlockId", blockId},
+                {"RoomId", roomId},
+                {"StartDate", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")},
+                {"EndDate", null}
+            };
+
+            Program.db.InsertRecord("StudentAccommodationHistory", record);
+        }
+
+        public static void CloseCurrentAccommodation(int studentId)
+        {
+            var records = Program.db.GetRecordsByField("StudentAccommodationHistory", "StudentId", studentId)
+                                    .Where(r => r["EndDate"] == DBNull.Value).ToList();
+            if (records.Count == 0)
+                return;
+
+            var lastRecordId = Convert.ToInt32(records.Last()["Id"]);
+
+            var update = new Dictionary<string, object>
+            {
+                {"EndDate", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}
+            };
+
+            Program.db.UpdateRecord("StudentAccommodationHistory", update, "Id", lastRecordId);
+        }
+    }
     public class ENUserInterFace
     {
-        public static void Login()
+        public static void Run()
+    {
+        while (true)
         {
-            while (true)
+            Clear();
+
+                var panel = new Panel("[bold yellow]🏠 Main Menu[/]")
+                    .RoundedBorder()
+                    .BorderStyle(Style.Parse("yellow"))
+                    .Padding(1, 1, 1, 1);
+
+                AnsiConsole.Write(panel);
+
+                var choice = AnsiConsole.Prompt(
+                new SelectionPrompt<string>()
+                    .Title("[bold yellow]Select an option[/]")
+                    .PageSize(5)
+                    .AddChoices(new[] {
+                        "🔐 Login Admin",
+                        "📝 Register Admin",
+                        "🔑 Forgot Password",
+                        "📃 Guide",
+                        "🚪 Exit"
+                    }));
+
+            switch (choice)
             {
-                Clear();
-                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Main Menu[/]").PageSize(10).AddChoices(new[]
-                {
-                    "1. Login Admin",
-                    "2. Sign in Admin",
-                    "3. Forgot Password",
-                    "4. Exit"
-                }));
-                switch (choice)
-                {
-                    case "1. Login Admin":
-                        adminLogin();
+                case "🔐 Login Admin":
+                    AdminLogin();
+                    break;
+                case "📝 Register Admin":
+                    RegisterAdmin();
+                    break;
+                case "🔑 Forgot Password":
+                    ForgotPassword();
+                    break;
+                case "📃 Guide":
+                    ShowGuide();
                         break;
-                    case "2. Sign in Admin":
-                        signinAdmin();
-                        break;
-                    case "3. Forgot Password":
-                        forgotpassword();
-                        break;
-                    case "4. Exit":
-                        return;
-                }
-                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
-                ReadLine();
+                case "🚪 Exit":
+                    AnsiConsole.MarkupLine("[bold green]Goodbye! 👋[/]");
+                    return;
             }
+
+            AnsiConsole.MarkupLine("\n[grey]Press any key to return to the main menu...[/]");
+            ReadKey(true);
         }
-        public static void adminLogin()
+    }
+        private static void AdminLogin()
         {
-            AnsiConsole.MarkupLine("[blue]Login Admin[/]");
-            var username = AnsiConsole.Ask<string>("UserNmae : ");
-            if (checkback(username)) Login();
-            var password = Security.ReadPasswordWithToggleSpectre();
-            if (checkback(password)) Login();
-            bool success = DirectorManager.Login(username, password);
-            if (success)
-            {
-                AnsiConsole.MarkupLine($"[green]{username} , Wellcome To Dormitory Mangement App[/]");
-                Thread.Sleep(3000);
-                mainMenu();
-            }
-            else
-            {
-                AnsiConsole.MarkupLine($"[red]Invalid Username or Password[/]");
-            }
-        }
-        public static void signinAdmin()
-        {
-            AnsiConsole.MarkupLine("[blue]Register New Admin[/]");
-            var fullname = AnsiConsole.Ask<string>("FullName : ");
-            if (checkback(fullname)) Login();
-            var socialnumber = AnsiConsole.Ask<string>("SocialNumber : ");
-            if(Program.db.GetRecordsByField("Director","SocialNumber",socialnumber).Count() > 0)
-            {
-                AnsiConsole.MarkupLine("[red]This Direcotr already exists ... [/]");
-                Thread.Sleep(2000);
-                signinAdmin();
-            }
-            if (checkback(socialnumber)) Login();
-            var phonenumber = AnsiConsole.Ask<string>("PhoneNumber : ");
-            if (phonenumber.ToLower() == "back") Login();
-            var username = AnsiConsole.Ask<string>("UserName : ");
-            if (checkback(username)) Login();
-            getpass:
-                var passwrod = Security.ReadPasswordWithToggleSpectre();
-            if (checkback(passwrod)) Login();
-            var repeatedpass = Security.ReadPasswordWithToggleSpectre();
-            if(repeatedpass != passwrod)
-            {
-                AnsiConsole.MarkupLine("[red]Password do not match ... [/]");
-                Thread.Sleep(2000);
-                goto getpass;
-            }
-            Director dir = new Director(fullname, socialnumber, phonenumber, username, passwrod);
-            bool success = DirectorManager.AddDirector(dir);
-            if (success)
-            {
-                AnsiConsole.MarkupLine("[green]Admin Registered Successfully.[/]");
-                Thread.Sleep(3000);
-                Login();
-            }
-            else
-            {
-                AnsiConsole.MarkupLine("[red]Register Failed , please try again.[/]");
-                Thread.Sleep(3000);
-                signinAdmin();
-            }
-        }
-        public static void forgotpassword()
-        {
-            AnsiConsole.MarkupLine("[blue]Forgot Password[/]");
-            var username = AnsiConsole.Ask<string>("Username : ");
-            if (checkback(username)) Login();
-            var socialnumber = AnsiConsole.Ask<string>("SocialNumber : ");
-            if (checkback((socialnumber))) Login();
-            var phonenumber = AnsiConsole.Ask<string>("PhoneNumber : ");
-            if (checkback(phonenumber)) Login();
-            bool validation = DirectorManager.ResetPassword(username, socialnumber, phonenumber);
-            if (validation)
-            {
-                setnewpassoword(username);
-            }
-            else
-            {
-                AnsiConsole.MarkupLine("[red]invlid username,socialnumber or phonen number,please try again.[/]");
-                Thread.Sleep(3000);
-                forgotpassword();
-            }
-        }
-        public static void setnewpassoword(string username)
-        {
-            AnsiConsole.MarkupLine("[blue]Set New Password");
-            var newpassword = Security.ReadPasswordWithToggleSpectre();
-            if (checkback(newpassword)) forgotpassword();
-            var repeatnewpassword = Security.ReadPasswordWithToggleSpectre();
-            if (checkback(repeatnewpassword)) forgotpassword();
-            if (newpassword.Length >= 8 && repeatnewpassword.Length >= 8)
-            {
-                if (newpassword == repeatnewpassword)
+            Clear();
+            AnsiConsole.Write(
+                new Panel("[bold underline green]👤 Admin Login[/]")
+                .RoundedBorder()
+                .BorderColor(Spectre.Console.Color.Green));
+
+            string username = AnsiConsole.Ask<string>("Username : ");
+            if (checkback(username)) Run();
+
+            string password = Security.ReadPasswordWithToggleSpectre();
+            if (checkback(password)) Run();
+
+            bool success = false;
+
+            AnsiConsole.Status()
+                .Spinner(Spinner.Known.BouncingBar)
+                .SpinnerStyle(Style.Parse("grey")) 
+                .Start("[grey]Checking credentials...[/]", ctx =>
                 {
-                    bool setpass = DirectorManager.GetNewpassword(username, newpassword);
-                    if (setpass)
+                    Thread.Sleep(2000); 
+
+                    success = DirectorManager.Login(username, password);
+
+                    if (success)
                     {
-                        AnsiConsole.MarkupLine("[green]Password has been reset.");
-                        Thread.Sleep(3000);
-                        Login();
+                        ctx.Status($"\n[bold green]✅ Welcome back, {username}![/]"); 
+                        ctx.SpinnerStyle(Style.Parse("green")); 
+                        Thread.Sleep(2000);
                     }
                     else
                     {
-                        AnsiConsole.MarkupLine("[red]changing password Failed , please try again.[/]");
-                        Thread.Sleep(3000);
-                        forgotpassword();
+                        ctx.Status("[bold red]❌ Invalid username or password.[/]");
+                        ctx.SpinnerStyle(Style.Parse("red"));
+                        Thread.Sleep(2000);
                     }
+                });
+
+            if (success)
+            {
+                mainMenu();
+            }
+        }
+        private static void RegisterAdmin()
+        {
+            Clear();
+            AnsiConsole.Write(
+                new Panel("[bold underline blue]📝 Register New Admin[/]")
+                .RoundedBorder()
+                .BorderColor( Spectre.Console.Color.Blue));
+            string socialNumber = "";
+            string phoneNumber = "";
+            string password = "";
+            string fullname = AnsiConsole.Ask<string>("Full Name : ");
+            if (checkback(fullname)) Run();
+            while (true)
+            {
+                socialNumber = AnsiConsole.Ask<string>("Social Number : ");
+                if(checkback(socialNumber))
+                {
+                    Run();
+                    break;
+                }
+                else if (Program.db.GetRecordsByField("Director", "SocialNumber", socialNumber).Count() > 0)
+                {
+                    AnsiConsole.MarkupLine("[red]👤❌This Direcotr already exists ... [/]");
+                    Thread.Sleep(3000);
+                    continue;
+                }
+                if (!Security.ValidSocialNumber(socialNumber))
+                {
+                    AnsiConsole.MarkupLine("[red]🔢The entered Social number is invalid,please retry .[/]");
+                    Thread.Sleep(3000);
                 }
                 else
                 {
-                    AnsiConsole.MarkupLine("[red]Password do not match.[/]");
-                    Thread.Sleep(3000);
-                    setnewpassoword(username);
+                    break;
                 }
+                
+            }
+
+            while (true)
+            {
+                phoneNumber = AnsiConsole.Ask<string>("Phone Number : ");
+                if (checkback(phoneNumber))
+                {
+                    Run();
+                    break;
+                }
+                if(!Security.ValidPhoneNumber(phoneNumber))
+                {
+                    AnsiConsole.MarkupLine("[red]The entered Phone number is invalid,please retry .[/]");
+                    Thread.Sleep(3000);
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            string username = AnsiConsole.Ask<string>("Username : ");
+            if(checkback(username)) Run();
+            while (true)
+            {
+                password = Security.ReadPasswordWithToggleSpectre();
+                if(checkback(password))
+                {
+                    Run();
+                    break;
+                }
+                if (password.Length < 8)
+                {
+                    AnsiConsole.MarkupLine("[red]password must be at least 8 characters long.[/]");
+                    Thread.Sleep(3000);
+                    continue;
+                }
+                string confirmPassword = Security.ReadPasswordWithToggleSpectre(false);
+                if (password != confirmPassword)
+                {
+                    AnsiConsole.MarkupLine("[bold red]❌ Passwords do not match![/]");
+                    Thread.Sleep(1500);
+                }
+                else { break; }
+            }
+
+            Director dir = new Director(fullname, socialNumber, phoneNumber, username, password);
+
+            bool success = DirectorManager.AddDirector(dir);
+
+            if (success)
+            {
+                AnsiConsole.MarkupLine("[bold green]✅ Admin registered successfully![/]");
             }
             else
             {
-                AnsiConsole.MarkupLine("[red]Password's length must be at least 8 character long.[/]");
-                Thread.Sleep(3000);
-                setnewpassoword(username);
+                AnsiConsole.MarkupLine("[bold red]❌ Registration failed. Please try again.[/]");
+            }
+        }
+        private static void ForgotPassword()
+        {
+            Clear();
+            AnsiConsole.Write(
+                new Panel("[bold underline yellow]🔑 Forgot Password[/]")
+                .RoundedBorder()
+                .BorderColor(Spectre.Console.Color.Yellow));
+
+            string username = AnsiConsole.Ask<string>("Username : ");
+            if(checkback(username)) Run();
+
+            string socialNumber = AnsiConsole.Ask<string>("Social Number : ");
+            if (checkback(socialNumber)) Run();
+
+            string phoneNumber = AnsiConsole.Ask<string>("Phone Number : ");
+            if( checkback(phoneNumber)) Run();
+
+            bool valid = DirectorManager.ResetPassword(username, socialNumber, phoneNumber);
+
+            if (!valid)
+            {
+                AnsiConsole.MarkupLine("[bold red]❌ Information does not match our records.[/]");
+                Thread.Sleep(300);
+                ForgotPassword();
+                return;
+            }
+
+            SetNewPassword(username);
+        }
+        private static void SetNewPassword(string username)
+        {
+            AnsiConsole.MarkupLine("[bold underline]Set New Password[/]");
+            string newPassword = "";
+            string repeatPassword = "";
+            while (true)
+            {
+               newPassword = Security.ReadPasswordWithToggleSpectre();
+                if (checkback(newPassword)) { ForgotPassword(); break; }
+                if (newPassword.Length < 8)
+                {
+                    AnsiConsole.MarkupLine("[bold red]❌ Password must be at least 8 characters long.[/]");
+                    Thread.Sleep(3000);
+                    SetNewPassword(username);
+                    continue;
+                }
+                else { break; }
+                
+            }
+            while(true)
+            {
+                repeatPassword = Security.ReadPasswordWithToggleSpectre(false);
+                if (checkback(repeatPassword)) { ForgotPassword(); break; }
+                if (newPassword != repeatPassword)
+                {
+                    AnsiConsole.MarkupLine("[bold red]❌ Passwords do not match![/]");
+                    Thread.Sleep(1500);
+                    SetNewPassword(username);
+                    continue ;
+                }
+                else
+                {  break; }
+            }
+            bool setPass = DirectorManager.GetNewpassword(username, newPassword);
+
+            if (setPass)
+            {
+                AnsiConsole.MarkupLine("[bold green]✅ Password reset successfully![/]");
+                Thread.Sleep(1500);
+                Run();
+            }
+            else
+            {
+                AnsiConsole.MarkupLine("[bold red]❌ Failed to reset password. Please try again.[/]");
+                Thread.Sleep(1500);
+                ForgotPassword();
             }
         }
         public static bool checkback(string arg)
         {
             return (arg.ToLower() == "back") ? true : false;
         }
+        public static void ShowGuide()
+        {
+            AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots2)
+                .SpinnerStyle(Style.Parse("green"))
+                .Start("Loading user guide...", ctx =>
+                {
+                    Thread.Sleep(1500);
+                    AnsiConsole.Clear();
+
+                    AnsiConsole.Write(
+                        new FigletText("Welcome!")
+                            .Centered()
+                            .Color(Spectre.Console.Color.Yellow));
+
+                    AnsiConsole.WriteLine();
+                    AnsiConsole.MarkupLine("[bold underline green]📘 User Guide[/]");
+                    AnsiConsole.WriteLine();
+
+                    var panel = new Panel(@"
+                    [bold yellow]🔹 Basic Navigation:[/]
+                    - In any form or menu, type [bold]back[/] to return to the previous menu.
+                    - Use arrow keys (↑ ↓) or numbered options to navigate menus.
+
+                    [bold yellow]🔹 Entering Data:[/]
+                    - Provide accurate and valid information as requested.
+                    - For example:
+                        - Dormitory Name: [italic]Green Valley[/]
+                        - Capacity: [italic]30[/]
+                        - Student ID: [italic]9912345678[/]
+
+                    [bold yellow]🔹 Canceling Actions:[/]
+                    - If supported, type [bold]cancel[/] or [bold]leave[/] to abort an operation.
+
+                    [bold yellow]🔹 Other Tips:[/]
+                    - Always double-check your inputs.
+                    - If an error occurs, read the messages carefully to correct it.
+
+                    [italic underline grey]Need help? Contact system administrator.[/]
+                    ")
+                    {
+                        Border = BoxBorder.Double,
+                        Padding = new Padding(1, 1),
+                        BorderStyle = new Style(foreground: Spectre.Console.Color.Aqua),
+                        Header = new PanelHeader("[bold blue]Dormitory System Guide[/]", Justify.Center)
+                    };
+
+                    AnsiConsole.Write(panel);
+                    AnsiConsole.WriteLine();
+                    AnsiConsole.MarkupLine("[dim]Press any key to return to the main menu...[/]");
+                    ReadKey();
+                });
+        }
         public static void mainMenu()
         {
             while (true)
             {
-                Clear();
-                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Main Menu[/]").PageSize(10).AddChoices(new[]
+                    Clear();
+
+                var panel = new Panel("[bold yellow]🏠 Main Menu[/]")
+                    .RoundedBorder()
+                    .BorderStyle(Style.Parse("yellow"))
+                    .Padding(1, 1, 1, 1);
+
+                AnsiConsole.Write(panel);
+
+                var choices = new[]
                 {
-                    "1. Dormitories Manaegmenet",
-                    "2. Blocks Management",
-                    "3. People Management",
-                    "4. Properties Management",
-                    "5. Reporting"
-                }));
+            "[cyan]1.[/] 🏢 Dormitories Management",
+            "[cyan]2.[/] 🏗️ Blocks Management",
+            "[cyan]3.[/] 🧑 People Management",
+            "[cyan]4.[/] 🛠️ Properties Management",
+            "[cyan]5.[/] 📊 Reporting",
+            "[cyan]6.[/] 🚪Exit"
+        };
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[bold green]Select an option:[/]")
+                        .PageSize(10)
+                        .AddChoices(choices));
+
                 switch (choice)
                 {
-                    case "1. Dormitories Manaegmenet":
+                    case var s when s.Contains("Dormitories"):
                         dormitorymngmnt();
                         break;
-                    case "2. Blocks Management":
+                    case var s when s.Contains("Blocks"):
                         blockmngmnt();
                         break;
-                    case "3. People Management":
+                    case var s when s.Contains("People"):
                         peoplemngmnt();
                         break;
-                    case "4. Properties Management":
+                    case var s when s.Contains("Properties"):
                         equipmentmngmnt();
                         break;
-                    case "5. Reporting":
+                    case var s when s.Contains("Reporting"):
                         reporting();
                         break;
+                    case var s when s.Contains("Exit"):
+                        return;
                 }
-                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+
+                AnsiConsole.MarkupLine("\n[bold blue]Press ENTER to continue...[/]");
                 ReadLine();
             }
-
         }
         public static void dormitorymngmnt()
         {
             while (true)
             {
                 Clear();
-                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Dormitory Management Menu[/]").PageSize(10).AddChoices(new[]
+
+                AnsiConsole.Write(
+                    new Panel("[bold yellow]🏠 Dormitory Management Menu[/]")
+                        .RoundedBorder()
+                        .BorderColor(Spectre.Console.Color.Yellow)
+                        .Padding(1, 1, 1, 1)
+                );
+
+                var choices = new[]
                 {
-                    "1. Add new Dormitory",
-                    "2. Remove Dormitory",
-                    "3. Edit Dormitory informations",
-                    "4. Show All Dormitorise",
-                    "5. Back to main menu"
-                }));
+            "1. ➕ Add new Dormitory",
+            "2. ❌ Remove Dormitory",
+            "3. ✏️ Edit Dormitory informations",
+            "4. 📋 Show All Dormitories",
+            "5. 🔙 Back to main menu"
+        };
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[bold green]Select an option:[/]")
+                        .PageSize(10)
+                        .AddChoices(choices)
+                );
+
                 switch (choice)
                 {
-                    case "1. Add new Dormitory":
+                    case var s when s.Contains("Add"):
                         Program.GetDormitoryInfo();
                         break;
-                    case "2. Remove Dormitory":
+                    case var s when s.Contains("Remove"):
                         Program.RemoveDormitory();
                         break;
-                    case "3. Edit Dormitory informations":
+                    case var s when s.Contains("Edit"):
                         Program.UpdateDormitoryInfo();
                         break;
-                    case "4. Show All Dormitorise":
+                    case var s when s.Contains("Show"):
                         Program.ShowAllDormitory();
                         break;
-                    case "5. Back to main menu":
+                    case var s when s.Contains("Back"):
                         mainMenu();
                         break;
                 }
-                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+
+                AnsiConsole.MarkupLine("\n[bold blue]Press ENTER to continue...[/]");
                 ReadLine();
             }
         }
@@ -1987,33 +2515,50 @@ namespace Dormitory
             while (true)
             {
                 Clear();
-                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Block Management Menu[/]").PageSize(10).AddChoices(new[]
+
+                AnsiConsole.Write(
+                    new Panel("[bold yellow]🏢 Block Management Menu[/]")
+                        .RoundedBorder()
+                        .BorderColor(Spectre.Console.Color.Yellow)
+                        .Padding(1, 1, 1, 1)
+                );
+
+                var choices = new[]
                 {
-                    "1. Add new Block",
-                    "2. Remove Block",
-                    "3. Edit Block informations",
-                    "4. Show All Blocks",
-                    "5. Back to main menu"
-                }));
+            "1. ➕ Add new Block",
+            "2. ❌ Remove Block",
+            "3. ✏️ Edit Block informations",
+            "4. 📋 Show All Blocks",
+            "5. 🔙 Back to main menu"
+        };
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[bold green]Select an option:[/]")
+                        .PageSize(10)
+                        .AddChoices(choices)
+                );
+
                 switch (choice)
                 {
-                    case "1. Add new Block":
+                    case var s when s.Contains("Add"):
                         Program.GetBlockInfo();
                         break;
-                    case "2. Remove Block":
+                    case var s when s.Contains("Remove"):
                         Program.RemoveBlock();
                         break;
-                    case "3. Edit Block informations":
+                    case var s when s.Contains("Edit"):
                         Program.UpdateBlockInfo();
                         break;
-                    case "4. Show All Blocks":
+                    case var s when s.Contains("Show"):
                         Program.ShowAllBlocks();
                         break;
-                    case "5. Back to main menu":
+                    case var s when s.Contains("Back"):
                         mainMenu();
                         break;
                 }
-                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+
+                AnsiConsole.MarkupLine("\n[bold blue]Press ENTER to continue...[/]");
                 ReadLine();
             }
         }
@@ -2022,30 +2567,46 @@ namespace Dormitory
             while (true)
             {
                 Clear();
-                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]People Management Menu[/]").PageSize(10).AddChoices(new[]
+
+                AnsiConsole.Write(
+                    new Panel("[bold yellow]🧑 People Management Menu[/]")
+                        .RoundedBorder()
+                        .BorderColor(Spectre.Console.Color.Yellow)
+                        .Padding(1, 1, 1, 1)
+                );
+
+                var choices = new[]
                 {
-                    "1. Manage Dormitory supervisors",
-                    "2. Manage Block supervisors",
-                    "3. Managa Students",
-                    "4. Back to main menu"
-                }));
+            "1. 🏠 Manage Dormitory supervisors",
+            "2. 🏢 Manage Block supervisors",
+            "3. 🎓 Manage Students",
+            "4. 🔙 Back to main menu"
+        };
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[bold green]Select an option:[/]")
+                        .PageSize(10)
+                        .AddChoices(choices)
+                );
+
                 switch (choice)
                 {
-                    case "1. Manage Dormitory supervisors":
+                    case var s when s.Contains("Dormitory"):
                         sueprvisormngmnt();
                         break;
-                    case "2. Manage Block supervisors":
+                    case var s when s.Contains("Block"):
                         blocksupervisormngmnt();
                         break;
-                    case "3. Managa Students":
+                    case var s when s.Contains("Students"):
                         studentMngmnt();
                         break;
-                    case "4. Back to main menu":
+                    case var s when s.Contains("Back"):
                         mainMenu();
                         break;
-
                 }
-                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+
+                AnsiConsole.MarkupLine("\n[bold blue]Press ENTER to continue...[/]");
                 ReadLine();
             }
         }
@@ -2054,41 +2615,58 @@ namespace Dormitory
             while (true)
             {
                 Clear();
-                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Equipment Management Menu[/]").PageSize(10).AddChoices(new[]
+
+                AnsiConsole.Write(
+                    new Panel("[bold yellow]🛠️ Equipment Management Menu[/]")
+                        .RoundedBorder()
+                        .BorderColor(Spectre.Console.Color.Yellow)
+                        .Padding(1, 1, 1, 1)
+                );
+
+                var choices = new[]
                 {
-                    "1. Register new equipment",
-                    "2. Assign equipment to Rooms",
-                    "3. Assign equipment to Students",
-                    "4. Exchange equipment between rooms",
-                    "5. Change student's equipment",
-                    "6. Maintenance management",
-                    "7. Back to main menu"
-                }));
+            "1. 🆕 Register new equipment",
+            "2. 🏠 Assign equipment to Rooms",
+            "3. 🎓 Assign equipment to Students",
+            "4. 🔄 Exchange equipment between rooms",
+            "5. ✏️ Change student's equipment",
+            "6. 🛠️ Maintenance management",
+            "7. 🔙 Back to main menu"
+        };
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[bold green]Select an option:[/]")
+                        .PageSize(10)
+                        .AddChoices(choices)
+                );
+
                 switch (choice)
                 {
-                    case "1. Register new equipment":
+                    case var s when s.Contains("Register"):
                         Program.RegisterNewEquipment();
                         break;
-                    case "2. Assign equipment to Rooms":
+                    case var s when s.Contains("Rooms"):
                         Program.AssignEquipmentToRoom();
                         break;
-                    case "3. Assign equipment to Students":
+                    case var s when s.Contains("Students"):
                         Program.AssignEquipmentToStudent();
                         break;
-                    case "4. Exchange equipment between rooms":
+                    case var s when s.Contains("Exchange"):
                         Program.ExchangeEquipmentBetweenRooms();
                         break;
-                    case "5. Change student's equipment":
+                    case var s when s.Contains("Change"):
                         Program.ChangeStudentEquipment();
                         break;
-                    case "6. Maintenance management":
+                    case var s when s.Contains("Maintenance"):
                         maintenancemngmnt();
                         break;
-                    case "7. Back to main menu":
+                    case var s when s.Contains("Back"):
                         mainMenu();
                         break;
                 }
-                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+
+                AnsiConsole.MarkupLine("\n[bold blue]Press ENTER to continue...[/]");
                 ReadLine();
             }
         }
@@ -2097,34 +2675,50 @@ namespace Dormitory
             while (true)
             {
                 Clear();
-                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Supervisor Management Menu[/]").PageSize(10).AddChoices(new[]
+
+                AnsiConsole.Write(
+                    new Panel("[bold yellow]👨‍💼 Supervisor Management Menu [/]")
+                        .RoundedBorder()
+                        .BorderColor(Spectre.Console.Color.Yellow)
+                        .Padding(1, 1, 1, 1)
+                );
+
+                var choices = new[]
                 {
-                    "1. Register New Dormitory supervisor",
-                    "2. Remove Existing Dormitory supervisor",
-                    "3. Edit Dormitory Supervisor informatioans",
-                    "4. Show All Dormitory Supervisors",
-                    "5. Back to previous menu"
-                }));
+            "1. 🆕 Register New Dormitory supervisor",
+            "2. ❌ Remove Existing Dormitory supervisor",
+            "3. ✏️ Edit Dormitory Supervisor informations",
+            "4. 📋 Show All Dormitory Supervisors",
+            "5. 🔙 Back to previous menu"
+        };
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[bold green]Select an option:[/]")
+                        .PageSize(10)
+                        .AddChoices(choices)
+                );
+
                 switch (choice)
                 {
-                    case "1. Register New Dormitory supervisor":
+                    case var s when s.Contains("Register"):
                         Program.GetSuperVisorInfo();
                         break;
-                    case "2. Remove Existing Dormitory supervisor":
+                    case var s when s.Contains("Remove"):
                         Program.RemoveSupervisor();
                         break;
-                    case "3. Edit Dormitory Supervisor informatioans":
+                    case var s when s.Contains("Edit"):
                         Program.UpdateSupervisor();
                         break;
-                    case "4. Show All Dormitory Supervisors":
+                    case var s when s.Contains("Show"):
                         Program.ShowAllSupreVisor();
                         break;
-                    case "5. Back to previous menu":
+                    case var s when s.Contains("Back"):
                         peoplemngmnt();
                         break;
-
                 }
-                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+
+                AnsiConsole.MarkupLine("\n[bold blue]Press ENTER to continue...[/]");
                 ReadLine();
             }
         }
@@ -2133,34 +2727,50 @@ namespace Dormitory
             while (true)
             {
                 Clear();
-                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Supervisor Management Menu[/]").PageSize(10).AddChoices(new[]
+
+                AnsiConsole.Write(
+                    new Panel("[bold yellow]👔 Block Supervisor Management Menu[/]")
+                        .RoundedBorder()
+                        .BorderColor(Spectre.Console.Color.Yellow)
+                        .Padding(1, 1, 1, 1)
+                );
+
+                var choices = new[]
                 {
-                    "1. Register New Block supervisor",
-                    "2. Remove Existing Block supervisor",
-                    "3. Edit Block Supervisor informatioans",
-                    "4. Show All Block Supervisors",
-                    "5. Back to previous menu"
-                }));
+            "1. 🆕 Register New Block supervisor",
+            "2. ❌ Remove Existing Block supervisor",
+            "3. ✏️ Edit Block Supervisor informations",
+            "4. 📋 Show All Block Supervisors",
+            "5. 🔙 Back to previous menu"
+        };
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[bold green]Select an option:[/]")
+                        .PageSize(10)
+                        .AddChoices(choices)
+                );
+
                 switch (choice)
                 {
-                    case "1. Register New Block supervisor":
+                    case var s when s.Contains("Register"):
                         Program.AddBlockSupervisor();
                         break;
-                    case "2. Remove Existing Block supervisor":
+                    case var s when s.Contains("Remove"):
                         Program.RemoveBlockSupervisor();
                         break;
-                    case "3. Edit Block Supervisor informatioans":
+                    case var s when s.Contains("Edit"):
                         Program.UpdateBlockSupervisor();
                         break;
-                    case "4. Show All Block Supervisors":
+                    case var s when s.Contains("Show"):
                         Program.ShowBlockSupervisor();
                         break;
-                    case "5. Back to previous menu":
+                    case var s when s.Contains("Back"):
                         peoplemngmnt();
                         break;
-
                 }
-                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+
+                AnsiConsole.MarkupLine("\n[bold blue]Press ENTER to continue...[/]");
                 ReadLine();
             }
         }
@@ -2169,46 +2779,62 @@ namespace Dormitory
             while (true)
             {
                 Clear();
-                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Supervisor Management Menu[/]").PageSize(10).AddChoices(new[]
+
+                AnsiConsole.Write(
+                    new Panel("[bold yellow]🎓 Student Management Menu[/]")
+                        .RoundedBorder()
+                        .BorderColor(Spectre.Console.Color.Yellow)
+                        .Padding(1, 1, 1, 1)
+                );
+
+                var choices = new[]
                 {
-                    "1. Register New Student",
-                    "2. Remove Existing Student",
-                    "3. Edit Student informatioans",
-                    "4. Search for a student",
-                    "5. Show complete student details",
-                    "6. Register student in dormitory",
-                    "7. Move Student to another accommodation",
-                    "8. Back to previous menu"
-                }));
+            "1. 🆕 Register New Student",
+            "2. ❌ Remove Existing Student",
+            "3. ✏️ Edit Student informations",
+            "4. 🔍 Searching options",
+            "5. 📋 Show complete student details",
+            "6. 🏠 Register student in dormitory",
+            "7. 🚚 Move Student to another accommodation",
+            "8. 🔙 Back to previous menu"
+        };
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[bold green]Select an option:[/]")
+                        .PageSize(10)
+                        .AddChoices(choices)
+                );
+
                 switch (choice)
                 {
-                    case "1. Register New Student":
+                    case var s when s.Contains("Register New Student"):
                         Program.GetStudentInfo();
                         break;
-                    case "2. Remove Existing Student":
+                    case var s when s.Contains("Remove Existing Student"):
                         Program.RemoveStudent();
                         break;
-                    case "3. Edit Student informatioans":
+                    case var s when s.Contains("Edit Student"):
                         Program.UpdateStudentInfo();
                         break;
-                    case "4. Search for a student":
-                        Program.SerachStudent();
+                    case var s when s.Contains("Searching"):
+                        searches();
                         break;
-                    case "5. Show complete student details":
+                    case var s when s.Contains("Show complete"):
                         Program.showStudentwithdata();
                         break;
-                    case "6. Register student in dormitory":
+                    case var s when s.Contains("Register student in dormitory"):
                         Program.GetStudentPlace();
                         break;
-                    case "7. Move Student to another accommodation":
+                    case var s when s.Contains("Move Student"):
                         Program.ChangeStudentPlace();
                         break;
-                    case "8. Back to previous menu":
+                    case var s when s.Contains("Back"):
                         peoplemngmnt();
                         break;
-
                 }
-                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+
+                AnsiConsole.MarkupLine("\n[bold blue]Press ENTER to continue...[/]");
                 ReadLine();
             }
         }
@@ -2217,30 +2843,46 @@ namespace Dormitory
             while (true)
             {
                 Clear();
-                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Maintenance Management Menu[/]").PageSize(10).AddChoices(new[]
+
+                AnsiConsole.Write(
+                    new Panel("[bold yellow]🛠️ Maintenance Management Menu[/]")
+                        .RoundedBorder()
+                        .BorderColor(Spectre.Console.Color.Yellow)
+                        .Padding(1, 1, 1, 1)
+                );
+
+                var choices = new[]
                 {
-                    "1. Request Repair of Equipment",
-                    "2. Check Status of Equipment Under Repairing",
-                    "3. Set Equipment Condition as Broken",
-                    "4. Back to Previous Menu"
-                }));
+            "1. 🛠️ Request Repair of Equipment",
+            "2. 🔍 Check Status of Equipment Under Repairing",
+            "3. ⚠️ Set Equipment Condition as Broken",
+            "4. 🔙 Back to Previous Menu"
+        };
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[bold green]Select an option:[/]")
+                        .PageSize(10)
+                        .AddChoices(choices)
+                );
+
                 switch (choice)
                 {
-                    case "1. Request Repair of Equipment":
+                    case var s when s.Contains("Request Repair"):
                         Program.RequestRepair();
                         break;
-                    case "2. Check Status of Equipment Under Repairing":
+                    case var s when s.Contains("Check Status"):
                         Program.CheckRepairStatus();
                         break;
-                    case "3. Set Equipment Condition as Broken":
+                    case var s when s.Contains("Set Equipment"):
                         Program.SetEquipmentConditionAsBroken();
                         break;
-                    case "4. Back to Previous Menu":
+                    case var s when s.Contains("Back"):
                         equipmentmngmnt();
                         break;
-
                 }
-                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+
+                AnsiConsole.MarkupLine("\n[bold blue]Press ENTER to continue...[/]");
                 ReadLine();
             }
         }
@@ -2249,30 +2891,46 @@ namespace Dormitory
             while (true)
             {
                 Clear();
-                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Reporting Menu[/]").PageSize(10).AddChoices(new[]
+
+                AnsiConsole.Write(
+                    new Panel("[bold yellow]📊 Reporting Menu[/]")
+                        .RoundedBorder()
+                        .BorderColor(Spectre.Console.Color.Yellow)
+                        .Padding(1, 1, 1, 1)
+                );
+
+                var choices = new[]
                 {
-                    "1. Accommodation status report",
-                    "2. Asset report",
-                    "3. Advance report",
-                    "4. Back to main menu"
-                }));
+            "1. 🏠 Accommodation status report",
+            "2. 🏢 Asset report",
+            "3. 📈 Advance report",
+            "4. 🔙 Back to main menu"
+        };
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[bold green]Select an option:[/]")
+                        .PageSize(10)
+                        .AddChoices(choices)
+                );
+
                 switch (choice)
                 {
-                    case "1. Accommodation status report":
+                    case var s when s.Contains("Accommodation"):
                         AccommodationStatusReport();
                         break;
-                    case "2. Asset report":
+                    case var s when s.Contains("Asset"):
                         AssetReport();
                         break;
-                    case "3. Advance report":
+                    case var s when s.Contains("Advance"):
                         SpecializedReports();
                         break;
-                    case "4. Back to main menu":
+                    case var s when s.Contains("Back"):
                         mainMenu();
                         break;
-
                 }
-                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+
+                AnsiConsole.MarkupLine("\n[bold blue]Press ENTER to continue...[/]");
                 ReadLine();
             }
         }
@@ -2281,29 +2939,46 @@ namespace Dormitory
             while (true)
             {
                 Clear();
-                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Accommodation status report Menu[/]").PageSize(10).AddChoices(new[]
+
+                AnsiConsole.Write(
+                    new Panel("[bold yellow]🏠 Accommodation Status Report Menu[/]")
+                        .RoundedBorder()
+                        .BorderColor(Spectre.Console.Color.Yellow)
+                        .Padding(1, 1, 1, 1)
+                );
+
+                var choices = new[]
                 {
-                    "1. Overall student accommodation statistics",
-                    "2. List of empty and full rooms",
-                    "3. The remaining capacity of each dormitory and block",
-                    "4. Back to main menu"
-                }));
+            "1. 📊 Overall student accommodation statistics",
+            "2. 🛏️ List of empty and full rooms",
+            "3. 📉 The remaining capacity of each dormitory and block",
+            "4. 🔙 Back to reporting menu"
+        };
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[bold green]Select an option:[/]")
+                        .PageSize(10)
+                        .AddChoices(choices)
+                );
+
                 switch (choice)
                 {
-                    case "1. Overall student accommodation statistics":
-                        Program.ShowStudentAccommodation();
+                    case var s when s.Contains("Overall"):
+                        Program.showStudentAccommodation();
                         break;
-                    case "2. List of empty and full rooms":
+                    case var s when s.Contains("empty and full"):
                         Program.ShowFullAndEmptyRoom();
                         break;
-                    case "3. The remaining capacity of each dormitory and block":
-                        Program.ShowRemainingCapacity();
+                    case var s when s.Contains("remaining capacity"):
+                        Program.showRemainingCapacity();
                         break;
-                    case "4. Back to main menu":
+                    case var s when s.Contains("Back"):
                         reporting();
                         break;
                 }
-                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+
+                AnsiConsole.MarkupLine("\n[bold blue]Press ENTER to continue...[/]");
                 ReadLine();
             }
         }
@@ -2312,33 +2987,50 @@ namespace Dormitory
             while (true)
             {
                 Clear();
-                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Asset report Menu[/]").PageSize(10).AddChoices(new[]
+
+                AnsiConsole.Write(
+                    new Panel("[bold yellow]🏢 Asset Report Menu[/]")
+                        .RoundedBorder()
+                        .BorderColor(Spectre.Console.Color.Yellow)
+                        .Padding(1, 1, 1, 1)
+                );
+
+                var choices = new[]
                 {
-                    "1. The full list of Asset",
-                    "2. The Asset allocated to each room",
-                    "3. The Asset assigned to each student",
-                    "4. Defective Asset and in repairing",
-                    "5. Back to main menu"
-                }));
+            "1. 📋 The full list of Asset",
+            "2. 🏠 The Asset allocated to each room",
+            "3. 🎓 The Asset assigned to each student",
+            "4. ⚠️ Defective Asset and in repairing",
+            "5. 🔙 Back to reporting menu"
+        };
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[bold green]Select an option:[/]")
+                        .PageSize(10)
+                        .AddChoices(choices)
+                );
+
                 switch (choice)
                 {
-                    case "1. The full list of Asset":
+                    case var s when s.Contains("full list"):
                         Program.ShowAllEquipment();
                         break;
-                    case "2. The Asset allocated to each room":
-                        Program.ShowAllEquipmentAssignedToEachRoom();
+                    case var s when s.Contains("allocated to each room"):
+                        Program.showAllEquipmentAssignedToEachRoom();
                         break;
-                    case "3. The Asset assigned to each student":
-                        Program.ShowAllEquipmentAssignedToEachStudent();
+                    case var s when s.Contains("assigned to each student"):
+                        Program.showAllEquipmentAssignedToEachStudent();
                         break;
-                    case "4. Defective Asset and in repairing":
+                    case var s when s.Contains("Defective"):
                         Program.ShowAllDefectiveAndInrepairEquipment();
                         break;
-                    case "5. Back to main menu":
+                    case var s when s.Contains("Back"):
                         reporting();
                         break;
                 }
-                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+
+                AnsiConsole.MarkupLine("\n[bold blue]Press ENTER to continue...[/]");
                 ReadLine();
             }
         }
@@ -2347,24 +3039,86 @@ namespace Dormitory
             while (true)
             {
                 Clear();
-                var choice = AnsiConsole.Prompt(new SelectionPrompt<string>().Title("[yellow]Specialized reports Menu[/]").PageSize(10).AddChoices(new[]
+
+                AnsiConsole.Write(
+                    new Panel("[bold yellow]📑 Specialized Reports Menu[/]")
+                        .RoundedBorder()
+                        .BorderColor(Spectre.Console.Color.Yellow)
+                        .Padding(1, 1, 1, 1)
+                );
+
+                var choices = new[]
                 {
-                    "1. Report repair requests",
-                    "2. Report of student history of accommodation",
-                    "3. Back to main menu"
-                }));
+            "1. 🛠️ Report repair requests",
+            "2. 📜 Report of student history of accommodation",
+            "3. 🔙 Back to reporting menu"
+        };
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[bold green]Select an option:[/]")
+                        .PageSize(10)
+                        .AddChoices(choices)
+                );
+
                 switch (choice)
                 {
-                    case "1. Report repair requests":
-                        Program.ShowAllRepairRequests();
+                    case var s when s.Contains("repair requests"):
+                        Program.showAllRepairRequests();
                         break;
-                    case "2. Report of student history of accommodation":
+                    case var s when s.Contains("student history"):
+                        Program.showHistoryOfAccommodation();
                         break;
-                    case "3. Back to main menu":
+                    case var s when s.Contains("Back"):
                         reporting();
                         break;
                 }
-                AnsiConsole.MarkupLine("[blue]press ENTER to continue...[/]");
+
+                AnsiConsole.MarkupLine("\n[bold blue]Press ENTER to continue...[/]");
+                ReadLine();
+            }
+        }
+        public static void searches()
+        {
+            while (true)
+            {
+                Clear();
+
+                AnsiConsole.Write(
+                    new Panel("[bold yellow]🎓 Student Management Search Menu[/]")
+                        .RoundedBorder()
+                        .BorderColor(Spectre.Console.Color.Yellow)
+                        .Padding(1, 1, 1, 1)
+                );
+
+                var choices = new[]
+                {
+            "1. 🔎 Simple Search for a Student",
+            "2. 🔍 Advanced Search for a Student",
+            "8. 🔙 Back to Previous Menu"
+        };
+
+                var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[bold green]Please select an option:[/]")
+                        .PageSize(10)
+                        .AddChoices(choices)
+                );
+
+                switch (choice)
+                {
+                    case var s when s.Contains("Simple Search"):
+                        Program.SimpleSerachStudent();
+                        break;
+                    case var s when s.Contains("Advanced Search"):
+                        Program.AdvanceStudentSearch();
+                        break;
+                    case var s when s.Contains("Back"):
+                        peoplemngmnt();
+                        return; 
+                }
+
+                AnsiConsole.MarkupLine("\n[bold blue]Press [yellow]ENTER[/] to continue...[/]");
                 ReadLine();
             }
         }
@@ -2379,40 +3133,102 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Register New Student[/]");
-                string FullName = AnsiConsole.Ask<string>("FullName : ");
-                if (ENUserInterFace.checkback(FullName)) ENUserInterFace.studentMngmnt();
-                string SocialNumber = AnsiConsole.Ask<string>("Social Number : ");
-                if(db.GetRecordsByField("Students","SocialNumber",SocialNumber).Count() > 0)
+                AnsiConsole.MarkupLine("[bold blue]📋 Register New Student[/]");
+                string SocialNumber;
+                string PhoneNumber;
+                string FullName = AnsiConsole.Ask<string>("Full Name: ");
+                if (ENUserInterFace.checkback(FullName))
+                    ENUserInterFace.studentMngmnt();
+
+                while (true)
                 {
-                    AnsiConsole.MarkupLine("[red]This Student already exists ... [/]");
-                    Thread.Sleep(2000);
-                    GetStudentInfo();
+                    SocialNumber = AnsiConsole.Ask<string>("Social Number: ");
+
+                    if (ENUserInterFace.checkback(SocialNumber))
+                    {
+                        ENUserInterFace.studentMngmnt();
+                        return;
+                    }
+
+                    if (!Security.ValidSocialNumber(SocialNumber))
+                    {
+                        AnsiConsole.MarkupLine("[red]❌ The entered Social Number is invalid. Please retry.[/]");
+                        Thread.Sleep(2000);
+                        continue;
+                    }
+
+                    bool exists = false;
+                    AnsiConsole.Status()
+                        .Spinner(Spinner.Known.Dots)
+                        .SpinnerStyle(Style.Parse("yellow"))
+                        .Start("Checking if student exists...", ctx =>
+                        {
+                            Thread.Sleep(2000);
+                            exists = db.GetRecordsByField("Students", "SocialNumber", SocialNumber).Any();
+                        });
+
+                    if (exists)
+                    {
+                        AnsiConsole.MarkupLine("[red]⚠️ This student already exists![/]");
+                        Thread.Sleep(2000);
+                        continue;
+                    }
+
+                    break;
                 }
-                if (ENUserInterFace.checkback(SocialNumber)) ENUserInterFace.studentMngmnt();
-                string PhoneNumber = AnsiConsole.Ask<string>("Phone Number : ");
-                if (ENUserInterFace.checkback(PhoneNumber)) ENUserInterFace.studentMngmnt();
-                string Address = AnsiConsole.Ask<string>("Address : ");
-                if (ENUserInterFace.checkback(Address)) ENUserInterFace.studentMngmnt();
-                string studentid = AnsiConsole.Ask<string>("Student ID : ");
-                if (ENUserInterFace.checkback(studentid)) ENUserInterFace.studentMngmnt();
-                bool doen = StudentManager.AddStudent(FullName, SocialNumber, PhoneNumber, Address, studentid);
-                if (doen)
+
+                while (true)
                 {
-                    AnsiConsole.MarkupLine("[green]Student Created successflly .[/]");
+                    PhoneNumber = AnsiConsole.Ask<string>("Phone Number: ");
+                    if (ENUserInterFace.checkback(PhoneNumber))
+                    {
+                        ENUserInterFace.studentMngmnt();
+                        return;
+                    }
+
+                    if (!Security.ValidPhoneNumber(PhoneNumber))
+                    {
+                        AnsiConsole.MarkupLine("[red]❌ The entered Phone Number is invalid. Please retry.[/]");
+                        Thread.Sleep(3000);
+                        continue;
+                    }
+
+                    break;
+                }
+                string Address = AnsiConsole.Ask<string>("Address: ");
+                if (ENUserInterFace.checkback(Address))
+                    ENUserInterFace.studentMngmnt();
+
+                string studentid = AnsiConsole.Ask<string>("Student ID: ");
+                if (ENUserInterFace.checkback(studentid))
+                    ENUserInterFace.studentMngmnt();
+                bool done = false;
+                AnsiConsole.Status()
+                        .Spinner(Spinner.Known.Dots)
+                        .SpinnerStyle(Style.Parse("yellow"))
+                        .Start("Saving student information ...", ctx =>
+                        {
+                            Thread.Sleep(2000);
+                            done = StudentManager.AddStudent(FullName, SocialNumber, PhoneNumber, Address, studentid);
+                        });
+                
+
+                if (done)
+                {
+                    AnsiConsole.MarkupLine("[green]✅ Student created successfully.[/]");
                     Thread.Sleep(3000);
                     ENUserInterFace.studentMngmnt();
                 }
                 else
                 {
-                    AnsiConsole.MarkupLine("[red]Creating student failed, please try again .[/]");
-                    Thread.Sleep(40000);
+                    AnsiConsole.MarkupLine("[red]❌ Creating student failed. Please try again.[/]");
+                    Thread.Sleep(3000);
                     ENUserInterFace.studentMngmnt();
                 }
             }
             catch (Exception)
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.studentMngmnt();
             }
@@ -2421,105 +3237,174 @@ namespace Dormitory
         {
             try
             {
-                string socialnumber = AnsiConsole.Ask<string>("Enter student Social Number : ");
+
+                var socialnumber = AnsiConsole.Ask<string>("Enter student Social Number : ");
                 if (ENUserInterFace.checkback(socialnumber)) ENUserInterFace.studentMngmnt();
+
                 var student = db.GetRecordsByField("Students", "SocialNumber", socialnumber);
-                if (student[0]["DormitoryId"].ToString() != "" || student[0]["BlockId"].ToString() != "" || student[0]["RoomId"].ToString() != "" )
+                if (student.Count == 0)
                 {
-                    AnsiConsole.MarkupLine("[gray]this student accommdated already. [/] ");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.studentMngmnt();
-                }    
-                if (student.Count() > 0)
-                {
-                    AnsiConsole.MarkupLine("[blue]Dormitories(remeber ID)[/]");
-                    db.ShowAllrecords("Dormitories", false);
-                    AnsiConsole.MarkupLine("[blue]Register Student in dormitory[/]");
-                    string dormitoryId = AnsiConsole.Ask<string>("Dormitory ID choosen : ");
-                    if (ENUserInterFace.checkback(dormitoryId)) ENUserInterFace.studentMngmnt();
-                    AnsiConsole.MarkupLine("[blue]Blocks(remeber ID)[/]");
-                    db.ShowRelatedRecords("Blocks", "DormitoryId", dormitoryId);
-                    string blockid = AnsiConsole.Ask<string>("Block ID choosen : ");
-                    if (ENUserInterFace.checkback(blockid)) ENUserInterFace.studentMngmnt();
-                    AnsiConsole.MarkupLine("[blue]Rooms(remeber ID)[/]");
-                    getroom:
-                        db.ShowRelatedRecords("Rooms", "BlockId", int.Parse(blockid));
-                    string roomid = AnsiConsole.Ask<string>("Room ID choosen : ");
-                    if (ENUserInterFace.checkback(roomid)) ENUserInterFace.studentMngmnt();
-                    var room = Program.db.GetRecordsByField("Rooms", "Id", roomid)[0];
-                    int cap = int.Parse(room["Capacity"].ToString());
-                    if (cap > 0)
-                    {
-                        bool done = StudentManager.assignStudentToAccommodation(socialnumber,int.Parse(dormitoryId),int.Parse(blockid),int.Parse(roomid));
-                        AnsiConsole.MarkupLine($"[green]the student with social number : {socialnumber} accommodated successfully .[/]");
-                        Thread.Sleep(3000);
-                        ENUserInterFace.studentMngmnt();
-                    }
-                    else
-                    {
-                        AnsiConsole.MarkupLine("[gray]The Chosen room dosen't hace enough capacity ... ");
-                        Thread.Sleep(3000);
-                        goto getroom;
-                    }
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine($"[red]No student found with social number : {socialnumber}");
+                    AnsiConsole.MarkupLine($"[red]❌ No student found with Social Number: {socialnumber}[/]");
                     Thread.Sleep(3000);
                     GetStudentPlace();
+                    return;
                 }
-            }
-            catch(Exception)
-            {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+
+                if (!string.IsNullOrEmpty(student[0]["DormitoryId"].ToString()) ||
+                    !string.IsNullOrEmpty(student[0]["BlockId"].ToString()) ||
+                    !string.IsNullOrEmpty(student[0]["RoomId"].ToString()))
+                {
+                    AnsiConsole.MarkupLine("[yellow]⚠️ This student is already accommodated.[/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.studentMngmnt();
+                    return;
+                }
+                string dormitoryId;
+                AnsiConsole.MarkupLine("[blue]🏢 Available Dormitories (remember ID):[/]");
+                db.ShowAllrecords("Dormitories", false);
+                while (true)
+                {
+                    dormitoryId = AnsiConsole.Ask<string>("Dormitory ID chosen: ");
+                    if (ENUserInterFace.checkback(dormitoryId))
+                    { 
+                        ENUserInterFace.studentMngmnt();
+                        return;
+                    }
+                    if (int.Parse(db.GetRecordsByField("Dormitories", "Id", dormitoryId)[0]["RemainingCapacity"].ToString()) <= 0)
+                    {
+                        AnsiConsole.MarkupLine("[bold red]❌ The dormitory dosen't have enough capacity. please choose another one.[/]");
+                        Thread.Sleep(3000);
+                        continue;
+                    }
+                    break;
+                }
+                AnsiConsole.MarkupLine("[blue]🏬 Blocks in selected dormitory:[/]");
+                db.ShowRelatedRecords("Blocks", "DormitoryId", dormitoryId);
+                string blockId;
+                while (true)
+                {
+                    blockId = AnsiConsole.Ask<string>("Block ID chosen: ");
+                    if (ENUserInterFace.checkback(blockId))
+                    {
+                        ENUserInterFace.studentMngmnt();
+                    }
+                    if (int.Parse(db.GetRecordsByField("Blocks", "Id", blockId)[0]["RemainingCapacity"].ToString()) <= 0)
+                    {
+                        AnsiConsole.MarkupLine("[bold red]❌ The Block dosen't have enough capacity. please choose another one.[/]");
+                        Thread.Sleep(3000);
+                        continue;
+                    }
+                    break;
+                }
+                string roomId = null;
+
+                while (true)
+                {
+                    AnsiConsole.MarkupLine("[blue]🚪 Available Rooms in selected block:[/]");
+                    db.ShowRelatedRecords("Rooms", "BlockId", int.Parse(blockId));
+
+                    roomId = AnsiConsole.Ask<string>("Room ID chosen: ");
+                    if (ENUserInterFace.checkback(roomId)) ENUserInterFace.studentMngmnt();
+
+                    var room = db.GetRecordsByField("Rooms", "Id", roomId).FirstOrDefault();
+                    if (room == null)
+                    {
+                        AnsiConsole.MarkupLine("[red]❌ Invalid Room ID. Try again.[/]");
+                        Thread.Sleep(2000);
+                        continue;
+                    }
+
+                    int capacity = int.Parse(room["RemainingCapacity"].ToString());
+                    if (capacity > 0)
+                        break;
+
+                    AnsiConsole.MarkupLine("[yellow]⚠️ The selected room is full. Please choose another room.[/]");
+                    Thread.Sleep(2000);
+                }
+
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots2)
+                    .SpinnerStyle(Style.Parse("green"))
+                    .Start("Assigning student to room...", ctx =>
+                    {
+                        Thread.Sleep(2000);
+                        StudentManager.assignStudentToAccommodation(socialnumber,
+                            int.Parse(dormitoryId),
+                            int.Parse(blockId),
+                            int.Parse(roomId));
+                    });
+
+                AnsiConsole.MarkupLine($"[green]✅ Student {socialnumber} has been successfully accommodated.[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.studentMngmnt();
             }
-            
+            catch (Exception)
+            {
+                AnsiConsole.MarkupLine("[red]❌ An error occurred. Returning to menu...[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.studentMngmnt();
+            }
         }
         public static void RemoveStudent()
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Remove Student[/]");
-                string socialnumber = AnsiConsole.Ask<string>("Enter the social number of student you want to remove : ");
-                if (ENUserInterFace.checkback(socialnumber)) ENUserInterFace.studentMngmnt();
+                AnsiConsole.MarkupLine("[bold yellow]🗑️ Remove Student[/]");
 
-                var data = db.GetRecordsByField("Students", "SocialNumber", socialnumber);
-                if (data.Count > 0)
+                while (true)
                 {
-                    var answ = AnsiConsole.Ask<string>($"A student with SocialNumber : {socialnumber} & Name : {data[0]["FullName"]} found , are sure to remove ? (Y/N) ");
-                    if (answ.ToLower() == "y")
-                    {
-                        bool done = StudentManager.RemoveStudent(socialnumber);
-                        if (done)
-                        {
-                            AnsiConsole.MarkupLine("[green]Student deleted successfully.[/]");
-                            Thread.Sleep(3000);
-                            ENUserInterFace.studentMngmnt();
-                        }
-                    }
-                    else if (answ.ToLower() == "n")
+                    string socialNumber = AnsiConsole.Ask<string>("Enter the [green]Social Number[/] of the student you want to remove: ");
+                    if (ENUserInterFace.checkback(socialNumber))
                     {
                         ENUserInterFace.studentMngmnt();
+                        return;
                     }
-                    else
+
+                    var data = db.GetRecordsByField("Students", "SocialNumber", socialNumber);
+
+                    if (data.Count == 0)
                     {
-                        AnsiConsole.MarkupLine("[red]unkonwn command,please retry again... [/]");
+                        AnsiConsole.MarkupLine($"[red]❌ No student found with Social Number: {socialNumber}![/]");
                         Thread.Sleep(3000);
-                        RemoveStudent();
+                        continue;
                     }
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine($"[red]No student found with SocialNumber : {socialnumber} ![/]");
+
+                    string fullName = data[0]["FullName"].ToString();
+                    var confirm = AnsiConsole.Prompt(
+                        new SelectionPrompt<string>()
+                            .Title($"A student with [cyan]{fullName}[/] was found.\nAre you sure you want to remove?")
+                            .AddChoices("✅ Yes", "❌ No")
+                    );
+
+                    if (confirm == "❌ No")
+                    {
+                        ENUserInterFace.studentMngmnt();
+                        return;
+                    }
+
+                    bool success = false;
+                    AnsiConsole.Status()
+                        .Spinner(Spinner.Known.Star)
+                        .SpinnerStyle(Style.Parse("green"))
+                        .Start("Removing student from database...", ctx =>
+                        {
+                            Thread.Sleep(1500);
+                            success = StudentManager.RemoveStudent(socialNumber);
+                        });
+
+                    if (success)
+                        AnsiConsole.MarkupLine("[green]✔️ Student deleted successfully![/]");
+                    else
+                        AnsiConsole.MarkupLine("[red]⚠️ Failed to delete student. Try again later.[/]");
+
                     Thread.Sleep(3000);
-                    RemoveStudent();
+                    ENUserInterFace.studentMngmnt();
+                    return;
                 }
             }
             catch (Exception)
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                AnsiConsole.MarkupLine("[red]❌ An unexpected error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.studentMngmnt();
             }
@@ -2528,215 +3413,477 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Update Student Supervisor infomations[/]");
-                string SoicalNumber = AnsiConsole.Ask<string>("Enter Student's SocialNumber : ");
-                if (ENUserInterFace.checkback(SoicalNumber)) ENUserInterFace.studentMngmnt();
-                var studentrecord = db.GetRecordsByField("Students", "SocialNumber", SoicalNumber);
+                AnsiConsole.MarkupLine("[bold blue]✏️ Update Student Information[/]");
+                string SocialNumber = AnsiConsole.Ask<string>("Enter Student's Social Number: ");
+                if (ENUserInterFace.checkback(SocialNumber))
+                {
+                    ENUserInterFace.studentMngmnt();
+                    return;
+                }
+
+                var studentrecord = db.GetRecordsByField("Students", "SocialNumber", SocialNumber);
                 if (studentrecord == null || studentrecord.Count == 0)
                 {
-                    AnsiConsole.MarkupLine($"[red]No Student found with the SocialNumber : {SoicalNumber} ![/]");
-                    Thread.Sleep(3000);
-                    UpdateStudentInfo();
-                }
-                string newPhone = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Phone Number :(if you don't want to change it,leave it blank) ").AllowEmpty());
-                if (ENUserInterFace.checkback(newPhone)) ENUserInterFace.studentMngmnt();
-                var newAddress = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Address :(if you don't want to change it,leave it blank) ").AllowEmpty());
-                if (ENUserInterFace.checkback(newAddress)) ENUserInterFace.studentMngmnt();
-                bool done = StudentManager.UpdateStudentInfoWithCurrentData(SoicalNumber, newPhone, newAddress);
-                if (done)
-                {
-                    AnsiConsole.MarkupLine("[green]Informations updated successfully.[/]");
+                    AnsiConsole.MarkupLine($"[red]❌ No student found with the Social Number: {SocialNumber}![/]");
                     Thread.Sleep(3000);
                     ENUserInterFace.studentMngmnt();
+                    return;
+                }
+
+                var newPhone = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Phone Number (leave blank to keep current): ").AllowEmpty());
+                if (ENUserInterFace.checkback(newPhone))
+                {
+                    ENUserInterFace.studentMngmnt();
+                    return;
+                }
+
+                var newAddress = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Address (leave blank to keep current): ").AllowEmpty());
+                if (ENUserInterFace.checkback(newAddress))
+                {
+                    ENUserInterFace.studentMngmnt();
+                    return;
+                }
+
+                bool done = false;
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("yellow"))
+                    .Start("Updating student information...", ctx =>
+                    {
+                        Thread.Sleep(1500);
+                        done = StudentManager.UpdateStudentInfoWithCurrentData(SocialNumber, newPhone, newAddress);
+                    });
+
+                if (done)
+                {
+                    AnsiConsole.MarkupLine("[green]✅ Information updated successfully.[/]");
                 }
                 else
                 {
-                    AnsiConsole.MarkupLine("[red]Updating information failed, please try later [/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.studentMngmnt();
+                    AnsiConsole.MarkupLine("[red]❌ Updating information failed. Please try again later.[/]");
                 }
+                Thread.Sleep(3000);
+                ENUserInterFace.studentMngmnt();
             }
             catch (Exception)
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.studentMngmnt();
             }
         }
-        public static void SerachStudent()
+        public static void SimpleSerachStudent()
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Search Student[/]");
-                string socialNumberOrPhoneNumber = AnsiConsole.Ask<string>("Enter Social Number or Phone number to search : ");
-                if (ENUserInterFace.checkback(socialNumberOrPhoneNumber)) ENUserInterFace.studentMngmnt();
-                if (Security.ValidPhoneNumber(socialNumberOrPhoneNumber))
+                AnsiConsole.MarkupLine("[bold blue]🔍 Search Student[/]");
+                string socialNumberOrPhoneNumber = AnsiConsole.Ask<string>("Enter Social Number or Phone number to search: ");
+                if (ENUserInterFace.checkback(socialNumberOrPhoneNumber))
                 {
-                    var studnet= Program.db.GetRecordsByField("Students", "PhoneNumber", socialNumberOrPhoneNumber);
-                    if (studnet.Count() > 0)
-                    {
-                        bool done = StudentManager.SerachStudent(null, socialNumberOrPhoneNumber);
-                        if(done) ENUserInterFace.studentMngmnt();
-                        else
-                        {
-                            AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
-                            Thread.Sleep(3000);
-                            ENUserInterFace.studentMngmnt();
-                        }
-                    }
-                    else
-                    {
-                        AnsiConsole.MarkupLine($"[red]No student found with phone number : {socialNumberOrPhoneNumber}");
-                        Thread.Sleep(3000);
-                        ENUserInterFace.studentMngmnt();          
-                    }
+                    ENUserInterFace.searches();
+                    return;
                 }
-                else if(Security.ValidSocialNumber(socialNumberOrPhoneNumber))
-                {
-                    var studnet = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumberOrPhoneNumber);
-                    if (studnet.Count() > 0)
-                    {
-                        bool done = StudentManager.SerachStudent(socialNumberOrPhoneNumber);
-                        if (done) ENUserInterFace.studentMngmnt();
-                        else
-                        {
-                            AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
-                            Thread.Sleep(3000);
-                            ENUserInterFace.studentMngmnt();
-                        }
-                    }
-                    else
-                    {
-                        AnsiConsole.MarkupLine($"[red]No student found with social number : {socialNumberOrPhoneNumber}");
-                        Thread.Sleep(3000);
-                        ENUserInterFace.studentMngmnt();
-                    }
 
+                bool exists = false;
+
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("yellow"))
+                    .Start("Searching for student...", ctx =>
+                    {
+                        Thread.Sleep(1500);
+
+                        if (Security.ValidPhoneNumber(socialNumberOrPhoneNumber))
+                        {
+                            exists = Program.db.GetRecordsByField("Students", "PhoneNumber", socialNumberOrPhoneNumber).Any();
+                        }
+                        else if (Security.ValidSocialNumber(socialNumberOrPhoneNumber))
+                        {
+                            exists = Program.db.GetRecordsByField("Students", "SocialNumber", socialNumberOrPhoneNumber).Any();
+                        }
+                    });
+
+                if (exists)
+                {
+                    AnsiConsole.MarkupLine("[green]✅ Search completed successfully! Displaying results...[/]");
+                    Thread.Sleep(1000);
+
+                    if (Security.ValidPhoneNumber(socialNumberOrPhoneNumber))
+                        db.ShowRecordsByField("Students", "PhoneNumber", socialNumberOrPhoneNumber);
+                    else
+                        db.ShowRecordsByField("Students", "SocialNumber", socialNumberOrPhoneNumber);
                 }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[red]⚠️ No student found with given identifier: {socialNumberOrPhoneNumber}[/]");
+                    Thread.Sleep(3000);
+                }
+
+                AnsiConsole.MarkupLine("[blue]Press ENTER to return to Student Management menu...[/]");
+                Console.ReadLine();
+                ENUserInterFace.searches();
             }
-            catch(Exception)
+            catch (Exception)
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
-                ENUserInterFace.studentMngmnt();
+                ENUserInterFace.searches();
             }
         }
         public static void ChangeStudentPlace()
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Change student accommodation[/]");
-                string socialnumber = AnsiConsole.Ask<string>("Studetn social number : ");
-                var studentRecords = db.GetRecordsByField("Students", "SocialNumber", socialnumber);
-                if (studentRecords.Count == 0)
+                AnsiConsole.MarkupLine("[bold blue]🏠 Change Student Accommodation[/]");
+                string socialnumber = AnsiConsole.Ask<string>("Student Social Number: ");
+
+                if (ENUserInterFace.checkback(socialnumber))
                 {
-                    AnsiConsole.MarkupLine("[red]No student found with this social number.[/]");
+                    ENUserInterFace.studentMngmnt();
+                    return;
+                }
+
+                bool studentExists = false;
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("yellow"))
+                    .Start("Checking student existence...", ctx =>
+                    {
+                        Thread.Sleep(1500);
+                        studentExists = db.GetRecordsByField("Students", "SocialNumber", socialnumber).Any();
+                    });
+
+                if (!studentExists)
+                {
+                    AnsiConsole.MarkupLine("[red]⚠️ No student found with this social number.[/]");
                     Thread.Sleep(3000);
                     ChangeStudentPlace();
+                    return;
                 }
-                if (studentRecords[0]["DormitoryId"].ToString() == "")
+
+                var studentRecord = db.GetRecordsByField("Students", "SocialNumber", socialnumber)[0];
+                if (string.IsNullOrWhiteSpace(studentRecord["DormitoryId"].ToString()))
                 {
-                    AnsiConsole.MarkupLine("[red]this student has not been assigned an accommodation yet. [/]");
+                    AnsiConsole.MarkupLine("[red]❌ This student has not been assigned an accommodation yet.[/]");
                     Thread.Sleep(3000);
                     ENUserInterFace.studentMngmnt();
-                }    
-                var newdata = db.ShowAccommodationStepByStepWithTable(socialnumber);
-                var roomcap = db.GetRecordsByField("Rooms", "Id", newdata["RoomId"])[0]["Capacity"];
-                if (int.Parse(roomcap.ToString()) > 0)
+                    return;
+                }
+                Dictionary<string, object> newdata;
+                while (true)
                 {
-                    bool done = StudentManager.ChangeDoirmiBlckRoom(socialnumber, newdata["DormitoryId"].ToString(), newdata["BlockId"].ToString(), newdata["RoomId"].ToString());
-                    AnsiConsole.MarkupLine("[green]Student's new Accommodation Changed successfully.[/] ");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.studentMngmnt();
+                    newdata = db.ShowAccommodationStepByStepWithTable(socialnumber);
+                    if (newdata["RoomId"].ToString() == studentRecord["RoomId"].ToString())
+                    {
+                        AnsiConsole.MarkupLine("[bold red]❌The origin & destinition room cannot be the same.");
+                        Thread.Sleep(3000);
+                        continue;
+                    }
+                    break;
+                }
+                var roomCapStr = db.GetRecordsByField("Rooms", "Id", newdata["RoomId"])[0]["RemainingCapacity"].ToString();
+                int roomCapacity = int.TryParse(roomCapStr, out int cap) ? cap : 0;
+
+                if (roomCapacity > 0)
+                {
+                    bool done = false;
+                    AnsiConsole.Status()
+                        .Spinner(Spinner.Known.Dots)
+                        .SpinnerStyle(Style.Parse("yellow"))
+                        .Start("Updating accommodation...", ctx =>
+                        {
+                            Thread.Sleep(1500);
+                            done = StudentManager.ChangeDoirmiBlckRoom(socialnumber, newdata["DormitoryId"].ToString(), newdata["BlockId"].ToString(), newdata["RoomId"].ToString());
+                        });
+
+                    if (done)
+                    {
+                        AnsiConsole.MarkupLine("[green]✅ Student's accommodation changed successfully.[/]");
+                        Thread.Sleep(3000);
+                        ENUserInterFace.studentMngmnt();
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine("[red]❌ Failed to change accommodation. Please try again.[/]");
+                        Thread.Sleep(3000);
+                        ENUserInterFace.studentMngmnt();
+                    }
                 }
                 else
                 {
-                    AnsiConsole.MarkupLine("[gray]The Chosen room dosen't have enough capacity ... ");
+                    AnsiConsole.MarkupLine("[yellow]⚠️ The chosen room doesn't have enough capacity.[/]");
                     Thread.Sleep(3000);
                     ChangeStudentPlace();
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                WriteLine(ex.ToString());
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
-                Thread.Sleep(40000);
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
+                Thread.Sleep(3000);
                 ENUserInterFace.studentMngmnt();
             }
-            
         }
         public static void showStudentwithdata()
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Show student information[/]");
-                string socialnumber = AnsiConsole.Ask<string>("Social Number : ");
-                if (db.GetRecordsByField("Students", "SocialNumber", socialnumber).Count() > 0)
+                AnsiConsole.MarkupLine("[bold blue]👤 Show Student Information[/]");
+                string socialnumber = AnsiConsole.Ask<string>("Social Number: ");
+
+                if (ENUserInterFace.checkback(socialnumber))
+                {
+                    ENUserInterFace.studentMngmnt();
+                    return;
+                }
+                var student = db.GetRecordsByField("Students", "SocialNumber", socialnumber);
+                bool exists = false;
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("yellow"))
+                    .Start("Searching for student...", ctx =>
+                    {
+                        Thread.Sleep(1500);
+                        exists = student.Any();
+                    });
+
+                if (exists)
                 {
                     db.ShowRecordsByField("Students", "SocialNumber", socialnumber);
                 }
                 else
                 {
-                    AnsiConsole.MarkupLine($"[red]No student found with social number : {socialnumber}[/]");
+                    AnsiConsole.MarkupLine($"[red]⚠️ No student found with Social Number: {socialnumber}[/]");
                     Thread.Sleep(3000);
                     showStudentwithdata();
+                    return;
                 }
+                bool exists1 = false;
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("yellow"))
+                    .Start("Searching for student equipment ...", ctx =>
+                    {
+                        Thread.Sleep(1500);
+                        exists1 = db.GetRecordsByField("Equipment", "OwnerId", int.Parse(student[0]["Id"].ToString())).Any();
+                    });
+
+                if(exists1)
+                {
+                    db.ShowRelatedRecords("Eqiupmen", "OwnerId", int.Parse(student[0]["Id"].ToString()));
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[red]⚠️ No student Equipment found with Social Number: {socialnumber}[/]");
+                    Thread.Sleep(3000);
+                }
+                AnsiConsole.MarkupLine("[blue]Press ENTER to return to the Student Management menu...[/]");
+                ReadLine();
+                ENUserInterFace.studentMngmnt();
             }
             catch (Exception)
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.studentMngmnt();
             }
+        }
+        public static void AdvanceStudentSearch()
+        {
+            List<Dictionary<string, object>> allStudents = null;
+
+            AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .SpinnerStyle(Style.Parse("green"))
+                .Start("Loading students from database...", ctx =>
+                {
+                    Thread.Sleep(1500); 
+                    allStudents = db.GetAllRecords("Students");
+                });
+
+            string input = "";
+            ConsoleKeyInfo key;
+
+            while (true)
+            {
+                AnsiConsole.Clear();
+                AnsiConsole.MarkupLine($"[bold blue]🔎 Advanced Student Search[/] | Type to search | Press [yellow]Esc[/] to exit\n");
+                AnsiConsole.Markup("[green]> [/]");
+                AnsiConsole.Markup(input);
+
+                var filtered = allStudents
+                    .Where(s => s["FullName"].ToString().Contains(input, StringComparison.OrdinalIgnoreCase))
+                    .Take(10)
+                    .ToList();
+
+                AnsiConsole.WriteLine();
+                AnsiConsole.WriteLine();
+
+                if (filtered.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[red]❌ No matching students found.[/]");
+                }
+                else
+                {
+                    foreach (var s in filtered)
+                    {
+                        string name = s["FullName"].ToString();
+                        string id = s["SocialNumber"].ToString();
+
+                        if (!string.IsNullOrEmpty(input))
+                        {
+                            var highlightedName = name.Replace(input, $"[yellow]{input}[/]", StringComparison.OrdinalIgnoreCase);
+                            AnsiConsole.MarkupLine($"[green]✔️[/] {highlightedName} [dim]({id})[/]");
+                        }
+                        else
+                        {
+                            AnsiConsole.MarkupLine($"[green]✔️[/] {name} [dim]({id})[/]");
+                        }
+                    }
+                }
+
+                key = Console.ReadKey(intercept: true);
+                if (key.Key == ConsoleKey.Escape)
+                    break;
+                else if (key.Key == ConsoleKey.Backspace && input.Length > 0)
+                    input = input[..^1];
+                else if (!char.IsControl(key.KeyChar))
+                    input += key.KeyChar;
+            }
+
+            AnsiConsole.Status()
+                .Spinner(Spinner.Known.Star)
+                .SpinnerStyle(Style.Parse("cyan"))
+                .Start("Closing search, preparing UI...", ctx =>
+                {
+                    Thread.Sleep(2000);
+                });
+
+            AnsiConsole.Clear();
+            AnsiConsole.MarkupLine("[bold green]✅ Search closed. Have a good day![/]");
         }
         //dormitory supervisor
         public static void GetSuperVisorInfo()
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Register New dormitorySupervisors[/]");
-                string FullName = AnsiConsole.Ask<string>("FullName : ");
-                if (ENUserInterFace.checkback(FullName)) ENUserInterFace.sueprvisormngmnt();
-                string SocialNumber = AnsiConsole.Ask<string>("Social Number : ");
-                if (ENUserInterFace.checkback(SocialNumber)) ENUserInterFace.sueprvisormngmnt();
-                if (db.GetRecordsByField("DormitorySupervisors", "SocialNumber", SocialNumber).Count() > 0)
+                AnsiConsole.MarkupLine("[bold blue]👨‍💼 Register New Dormitory Supervisor[/]");
+
+                string fullName = AnsiConsole.Ask<string>("Full Name: ");
+                if (ENUserInterFace.checkback(fullName))
                 {
-                    AnsiConsole.MarkupLine("[red]This Dormitory supervisor already exists ... [/]");
-                    Thread.Sleep(2000);
-                    GetSuperVisorInfo();
+                    ENUserInterFace.sueprvisormngmnt();
+                    return;
                 }
-                string PhoneNumber = AnsiConsole.Ask<string>("Phone Number : ");
-                if (ENUserInterFace.checkback(PhoneNumber)) ENUserInterFace.sueprvisormngmnt();
-                string Address = AnsiConsole.Ask<string>("Address : ");
-                if (ENUserInterFace.checkback(Address)) ENUserInterFace.sueprvisormngmnt();
-                pos:
-                    string Position = AnsiConsole.Ask<string>("Position : ");
-                if (ENUserInterFace.checkback(Position)) ENUserInterFace.sueprvisormngmnt();
-                if(Position.ToLower() == "student")
+
+                string socialNumber;
+                while (true)
                 {
-                    AnsiConsole.MarkupLine("[red]Dormitory supervisor's role can't be student ... [/]");
-                    Thread.Sleep(2000);
-                    goto pos;
+                    socialNumber = AnsiConsole.Ask<string>("Social Number: ");
+                    if (ENUserInterFace.checkback(socialNumber))
+                    {
+                        ENUserInterFace.sueprvisormngmnt();
+                        return;
+                    }
+
+                    if (!Security.ValidSocialNumber(socialNumber))
+                    {
+                        AnsiConsole.MarkupLine("[red]❌ The entered Social Number is invalid. Please retry.[/]");
+                        Thread.Sleep(2000);
+                        continue;
+                    }
+
+                    bool exists = false;
+                    AnsiConsole.Status()
+                        .Spinner(Spinner.Known.Dots)
+                        .SpinnerStyle(Style.Parse("yellow"))
+                        .Start("Checking if supervisor exists...", ctx =>
+                        {
+                            Thread.Sleep(1500);
+                            exists = db.GetRecordsByField("DormitorySupervisors", "SocialNumber", socialNumber).Any();
+                        });
+
+                    if (exists)
+                    {
+                        AnsiConsole.MarkupLine("[red]⚠️ This Dormitory supervisor already exists![/]");
+                        Thread.Sleep(2000);
+                        continue;
+                    }
+
+                    break;
                 }
-                
-                bool doen = DormitorySuperVisorManager.AddSuperVisor(FullName, SocialNumber, PhoneNumber, Address, Position);
-                if (doen)
+
+                string phoneNumber;
+                while (true)
                 {
-                    AnsiConsole.MarkupLine("[green]Dormitory Supervisor Created successflly .[/]");
+                    phoneNumber = AnsiConsole.Ask<string>("Phone Number: ");
+                    if (ENUserInterFace.checkback(phoneNumber))
+                    {
+                        ENUserInterFace.sueprvisormngmnt();
+                        return;
+                    }
+
+                    if (!Security.ValidPhoneNumber(phoneNumber))
+                    {
+                        AnsiConsole.MarkupLine("[red]❌ The entered Phone Number is invalid. Please retry.[/]");
+                        Thread.Sleep(2000);
+                        continue;
+                    }
+
+                    break;
+                }
+
+                string address = AnsiConsole.Ask<string>("Address: ");
+                if (ENUserInterFace.checkback(address))
+                {
+                    ENUserInterFace.sueprvisormngmnt();
+                    return;
+                }
+
+                string position;
+                while (true)
+                {
+                    position = AnsiConsole.Ask<string>("Position: ");
+                    if (ENUserInterFace.checkback(position))
+                    {
+                        ENUserInterFace.sueprvisormngmnt();
+                        return;
+                    }
+
+                    if (position.Trim().ToLower() == "student")
+                    {
+                        AnsiConsole.MarkupLine("[red]❌ Dormitory supervisor's role can't be 'student'. Please retry.[/]");
+                        Thread.Sleep(2000);
+                        continue;
+                    }
+                    break;
+                }
+
+                bool done = false;
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("yellow"))
+                    .Start("Saving supervisor information...", ctx =>
+                    {
+                        Thread.Sleep(1500);
+                        done = DormitorySuperVisorManager.AddSuperVisor(fullName, socialNumber, phoneNumber, address, position);
+                    });
+
+                if (done)
+                {
+                    AnsiConsole.MarkupLine("[green]✅ Dormitory Supervisor created successfully.[/]");
                     Thread.Sleep(3000);
                     ENUserInterFace.sueprvisormngmnt();
                 }
                 else
                 {
-                    AnsiConsole.MarkupLine("[red]Creating dormitory Supervisor failed, please try again .[/]");
+                    AnsiConsole.MarkupLine("[red]❌ Creating Dormitory Supervisor failed. Please try again.[/]");
                     Thread.Sleep(3000);
                     ENUserInterFace.sueprvisormngmnt();
                 }
-                
             }
             catch (Exception)
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.sueprvisormngmnt();
             }
@@ -2745,45 +3892,71 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Remove Dormitory Supervisor[/]");
-                string socialnumber = AnsiConsole.Ask<string>("Enter the social number of supervisor you want to remove : ");
-                if (ENUserInterFace.checkback(socialnumber)) ENUserInterFace.sueprvisormngmnt();
+                AnsiConsole.MarkupLine("[bold blue]🗑 Remove Dormitory Supervisor[/]");
 
-                var data = db.GetRecordsByField("DormitorySupervisors", "SocialNumber", socialnumber);
-                if (data.Count > 0)
+                while (true)
                 {
-                    var answ = AnsiConsole.Ask<string>($"A dormitory Supervisor with SocialNumber : {socialnumber} & Name : {data[0]["FullName"]} found , are sure to remove ? (Y/N) ");
-                    if (answ.ToLower() == "y")
-                    {
-                        bool done = DormitorySuperVisorManager.DeleteSpuervisor(socialnumber);
-                        if (done)
-                        {
-                            AnsiConsole.MarkupLine("[green]Dormitory Suupervisor deleted successfully.[/]");
-                            Thread.Sleep(3000);
-                            ENUserInterFace.sueprvisormngmnt();
-                        }
-                    }
-                    else if (answ.ToLower() == "n")
+
+                    string socialnumber = AnsiConsole.Ask<string>("Enter the social number of supervisor you want to remove: ");
+                    if (ENUserInterFace.checkback(socialnumber))
                     {
                         ENUserInterFace.sueprvisormngmnt();
+                        return;
+                    }
+
+
+                    var data = db.GetRecordsByField("DormitorySupervisors", "SocialNumber", socialnumber);
+
+                    if (data.Count == 0)
+                    {
+                        AnsiConsole.MarkupLine($"[red]No dormitory supervisor found with SocialNumber: {socialnumber}[/]");
+                        Thread.Sleep(3000);
+                        continue;
+                    }
+
+                    var answ = AnsiConsole.Ask<string>($"A dormitory supervisor with SocialNumber: {socialnumber} & Name: {data[0]["FullName"]} found. Are you sure to remove? (Y/N) ");
+                    if (answ.Trim().ToLower() == "y")
+                    {
+                        bool done = false;
+
+                        AnsiConsole.Status()
+                            .Spinner(Spinner.Known.Dots)
+                            .SpinnerStyle(Style.Parse("yellow"))
+                            .Start("Removing supervisor...", ctx =>
+                            {
+                                Thread.Sleep(1500);
+                                done = DormitorySuperVisorManager.DeleteSpuervisor(socialnumber);
+                            });
+
+                        if (done)
+                        {
+                            AnsiConsole.MarkupLine("[green]✅ Dormitory supervisor deleted successfully.[/]");
+                            Thread.Sleep(3000);
+                            ENUserInterFace.sueprvisormngmnt();
+                            return;
+                        }
+                        else
+                        {
+                            AnsiConsole.MarkupLine("[red]❌ Deleting supervisor failed. Please try again.[/]");
+                            Thread.Sleep(3000);
+                            continue;
+                        }
+                    }
+                    else if (answ.Trim().ToLower() == "n")
+                    {
+                        ENUserInterFace.sueprvisormngmnt();
+                        return;
                     }
                     else
                     {
-                        AnsiConsole.MarkupLine("[red]unkonwn command,please retry again... [/]");
+                        AnsiConsole.MarkupLine("[red]❌ Unknown command, please retry...[/]");
                         Thread.Sleep(3000);
-                        RemoveSupervisor();
                     }
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine($"[red]No dormitory Supervisor found with SocialNumber : {socialnumber} ![/]");
-                    Thread.Sleep(3000);
-                    RemoveSupervisor();
                 }
             }
             catch (Exception)
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.sueprvisormngmnt();
             }
@@ -2792,54 +3965,91 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Update Dormitory Supervisor infomations[/]");
-                string SoicalNumber = AnsiConsole.Ask<string>("Enter Dormitory Supervisor's SocialNumber : ");
-                if (ENUserInterFace.checkback(SoicalNumber)) ENUserInterFace.sueprvisormngmnt();
-                var suprevisorRecord = Program.db.GetRecordsByField("DormitorySupervisors", "SocialNumber", SoicalNumber);
-                if (suprevisorRecord == null || suprevisorRecord.Count == 0)
+                AnsiConsole.MarkupLine("[bold blue]✏️ Update Dormitory Supervisor Information[/]");
+                while (true)
                 {
-                    AnsiConsole.MarkupLine($"[red]No dormitory Supervisor found with SocialNumber : {SoicalNumber} ![/]");
-                    Thread.Sleep(3000);
-                    UpdateSupervisor();
-                }
-                string newPhone = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Phone Number :(if you don't want to change it,leave it blank) ").AllowEmpty());
-                if (ENUserInterFace.checkback(newPhone)) ENUserInterFace.sueprvisormngmnt();
-                var newAddress = AnsiConsole.Prompt(new TextPrompt<string>("Enter new address :(if you don't want to change it,leave it blank) ").AllowEmpty());
-                if (ENUserInterFace.checkback(newAddress)) ENUserInterFace.sueprvisormngmnt();
-                string newPosition = AnsiConsole.Prompt(new TextPrompt<string>("Enter New Position :(if you don't want to change it,leave it blank) ").AllowEmpty());
-                if (ENUserInterFace.checkback(newPosition)) ENUserInterFace.sueprvisormngmnt();
-                bool done = DormitorySuperVisorManager.UpdateSupervisor(SoicalNumber, newPhone, newAddress, newPosition);
-                if (done)
-                {
-                    AnsiConsole.MarkupLine("[green]Informations updated successfully.[/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.sueprvisormngmnt();
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine("[red]Updating information failed, please try later [/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.sueprvisormngmnt();
+                    string socialNumber = AnsiConsole.Ask<string>("Enter Dormitory Supervisor's Social Number: ");
+                    if (ENUserInterFace.checkback(socialNumber))
+                    {
+                        ENUserInterFace.sueprvisormngmnt();
+                        return;
+                    }
+
+                    var supervisorRecord = db.GetRecordsByField("DormitorySupervisors", "SocialNumber", socialNumber);
+                    if (supervisorRecord == null || supervisorRecord.Count == 0)
+                    {
+                        AnsiConsole.MarkupLine($"[red]No dormitory supervisor found with Social Number: {socialNumber}[/]");
+                        Thread.Sleep(3000);
+                        continue;
+                    }
+
+                    string newPhone = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Phone Number (leave blank if no change): ").AllowEmpty());
+                    if (ENUserInterFace.checkback(newPhone))
+                    {
+                        ENUserInterFace.sueprvisormngmnt();
+                        return;
+                    }
+
+                    string newAddress = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Address (leave blank if no change): ").AllowEmpty());
+                    if (ENUserInterFace.checkback(newAddress))
+                    {
+                        ENUserInterFace.sueprvisormngmnt();
+                        return;
+                    }
+
+                    string newPosition = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Position (leave blank if no change): ").AllowEmpty());
+                    if (ENUserInterFace.checkback(newPosition))
+                    {
+                        ENUserInterFace.sueprvisormngmnt();
+                        return;
+                    }
+
+                    bool done = false;
+                    AnsiConsole.Status()
+                        .Spinner(Spinner.Known.Dots)
+                        .SpinnerStyle(Style.Parse("yellow"))
+                        .Start("Updating information...", ctx =>
+                        {
+                            Thread.Sleep(1000);
+                            done = DormitorySuperVisorManager.UpdateSupervisor(socialNumber, newPhone, newAddress, newPosition);
+                        });
+
+                    if (done)
+                    {
+                        AnsiConsole.MarkupLine("[green]✅ Information updated successfully.[/]");
+                        Thread.Sleep(3000);
+                        ENUserInterFace.sueprvisormngmnt();
+                        return;
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine("[red]❌ Updating information failed. Please try again.[/]");
+                        Thread.Sleep(3000);
+                    }
                 }
             }
             catch (Exception)
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.sueprvisormngmnt();
             }
-
         }
         public static void ShowAllSupreVisor()
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Show all Dormitory Supervisors[/]");
+                AnsiConsole.MarkupLine("[bold blue]📋 Show all Dormitory Supervisors[/]");
                 DormitorySuperVisorManager.ShowAllSupervisors();
+
+                AnsiConsole.MarkupLine("[blue]Press ENTER to return to Supervisor Management Menu...[/]");
+                ReadLine();
+
+                ENUserInterFace.sueprvisormngmnt();
             }
             catch (Exception)
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.sueprvisormngmnt();
             }
@@ -2849,68 +4059,129 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Register New Block Supervisor[/]");
-                string FullName = AnsiConsole.Ask<string>("Full Name : ");
-                if (ENUserInterFace.checkback(FullName)) ENUserInterFace.blocksupervisormngmnt();
+                AnsiConsole.MarkupLine("[bold blue]📋 Register New Block Supervisor[/]");
+                string FullName = AnsiConsole.Ask<string>("Full Name: ");
+                if (ENUserInterFace.checkback(FullName))
+                    ENUserInterFace.blocksupervisormngmnt();
 
-                string SocialNumber = AnsiConsole.Ask<string>("Social Number : ");
-                if (ENUserInterFace.checkback(SocialNumber)) ENUserInterFace.blocksupervisormngmnt();
-                if (db.GetRecordsByField("DormitoryBlockSupervisors", "SocialNumber", SocialNumber).Count() > 0)
+                string SocialNumber;
+                while (true)
                 {
-                    AnsiConsole.MarkupLine("[red]This Dormitory block supervisor already exists ... [/]");
-                    Thread.Sleep(2000);
-                    AddBlockSupervisor();
-                }
-                string PhoneNumber = AnsiConsole.Ask<string>("Phone Number : ");
-                if (ENUserInterFace.checkback(PhoneNumber)) ENUserInterFace.blocksupervisormngmnt();
-
-                string Address = AnsiConsole.Ask<string>("Address : ");
-                if (ENUserInterFace.checkback(Address)) ENUserInterFace.blocksupervisormngmnt();
-
-                getrole:
-                    string role = AnsiConsole.Ask<string>("Role : (Can be Student) ");
-                if (ENUserInterFace.checkback(role)) ENUserInterFace.blocksupervisormngmnt();
-                if (role.ToLower() == "student" && db.GetRecordsByField("Students", "SocialNumber", SocialNumber).Count() > 0)
-                {
-                    var student = db.GetRecordsByField("Students", "SocialNumber", SocialNumber)[0];
-                    if (FullName != student["FullName"].ToString() || PhoneNumber != student["PhoneNumber"].ToString() || Address != student["Address"].ToString())
+                    SocialNumber = AnsiConsole.Ask<string>("Social Number: ");
+                    if (ENUserInterFace.checkback(SocialNumber))
                     {
-                        AnsiConsole.MarkupLine("[red]Entered informations do not match with student's info ... [/]");
-                        Thread.Sleep(3000);
-                        AddBlockSupervisor();
+                        ENUserInterFace.blocksupervisormngmnt();
+                        return;
                     }
+                    if (!Security.ValidSocialNumber(SocialNumber))
+                    {
+                        AnsiConsole.MarkupLine("[red]❌ The entered Social Number is invalid. Please retry.[/]");
+                        Thread.Sleep(2000);
+                        continue;
+                    }
+                    bool exists = false;
+                    AnsiConsole.Status()
+                        .Spinner(Spinner.Known.Dots)
+                        .SpinnerStyle(Style.Parse("yellow"))
+                        .Start("Checking if block supervisor exists...", ctx =>
+                        {
+                            Thread.Sleep(1500);
+                            exists = db.GetRecordsByField("DormitoryBlockSupervisors", "SocialNumber", SocialNumber).Any();
+                        });
+                    if (exists)
+                    {
+                        AnsiConsole.MarkupLine("[red]⚠️ This Dormitory Block Supervisor already exists![/]");
+                        Thread.Sleep(2000);
+                        continue;
+                    }
+                    break;
                 }
-                string done = DormitoryBlockSupervisorManager.AddBlockSupervisor(
-                    FullName, SocialNumber, PhoneNumber, Address, role);
 
-                if (done == "success")
+                string PhoneNumber;
+                while (true)
                 {
-                    AnsiConsole.MarkupLine("[green]Dormitory Block Supervisor Created successfully.[/]");
-                    Thread.Sleep(3000);
+                    PhoneNumber = AnsiConsole.Ask<string>("Phone Number: ");
+                    if (ENUserInterFace.checkback(PhoneNumber))
+                    {
+                        ENUserInterFace.blocksupervisormngmnt();
+                        return;
+                    }
+                    if (!Security.ValidPhoneNumber(PhoneNumber))
+                    {
+                        AnsiConsole.MarkupLine("[red]❌ The entered Phone Number is invalid. Please retry.[/]");
+                        Thread.Sleep(2000);
+                        continue;
+                    }
+                    break;
+                }
+
+                string Address = AnsiConsole.Ask<string>("Address: ");
+                if (ENUserInterFace.checkback(Address))
+                    ENUserInterFace.blocksupervisormngmnt();
+
+                string role;
+                while (true)
+                {
+                    role = AnsiConsole.Ask<string>("Role (Can be Student): ");
+                    if (ENUserInterFace.checkback(role))
+                    {
+                        ENUserInterFace.blocksupervisormngmnt();
+                        return;
+                    }
+
+                    if (role.ToLower() == "student" && db.GetRecordsByField("Students", "SocialNumber", SocialNumber).Count() > 0)
+                    {
+                        var student = db.GetRecordsByField("Students", "SocialNumber", SocialNumber)[0];
+                        if (FullName != student["FullName"].ToString() ||
+                            PhoneNumber != student["PhoneNumber"].ToString() ||
+                            Address != student["Address"].ToString())
+                        {
+                            AnsiConsole.MarkupLine("[red]❌ Entered informations do not match student's info. Please retry.[/]");
+                            Thread.Sleep(3000);
+                            continue;
+                        }
+                    }
+                    break;
+                }
+
+                string result = null;
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("yellow"))
+                    .Start("Saving Block Supervisor information...", ctx =>
+                    {
+                        Thread.Sleep(2000);
+                        result = DormitoryBlockSupervisorManager.AddBlockSupervisor(FullName, SocialNumber, PhoneNumber, Address, role);
+                    });
+
+                if (result == "success")
+                {
+                    AnsiConsole.MarkupLine("[green]✅ Dormitory Block Supervisor created successfully.[/]"); Thread.Sleep(3000);
                     ENUserInterFace.blocksupervisormngmnt();
                 }
-                else if (done == "Student Exists But SocialNumber Is Not For a Student")
+                else if (result == "Student Exists But Role Is Not For a Student")
                 {
-                    AnsiConsole.MarkupLine("[red]Please enter role correctly.[/]");
+                    AnsiConsole.MarkupLine("[red]❌ there is a student with entered social number . please enter other info correct .[/]");
                     Thread.Sleep(3000);
-                    goto getrole;
+                    AddBlockSupervisor();
                 }
-                else if (done == "studentdosenotexist")
+                else if (result == "studentdosenotexist")
                 {
-                    AnsiConsole.MarkupLine("[red]Student with this Social Number not found![/]");
+                    AnsiConsole.MarkupLine("[red]❌ Student with this Social Number not found![/]");
                     Thread.Sleep(3000);
-                    goto getrole;
+                    AddBlockSupervisor();
                 }
-                else if (done == "unsucess")
+                else
                 {
-                    AnsiConsole.MarkupLine("[red]Creating dormitory Supervisor failed, please try again.[/]");
+                    AnsiConsole.MarkupLine("[red]❌ Creating Dormitory Block Supervisor failed, please try again.[/]");
                     Thread.Sleep(3000);
                     ENUserInterFace.blocksupervisormngmnt();
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                WriteLine(ex.ToString());
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.blocksupervisormngmnt();
             }
@@ -2919,51 +4190,71 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Remove Dormitory Block Supervisor[/]");
-                string socialnumber = AnsiConsole.Ask<string>("Enter the social number of supervisor you want to remove : ");
-                if (ENUserInterFace.checkback(socialnumber)) ENUserInterFace.blocksupervisormngmnt();
+                AnsiConsole.MarkupLine("[bold blue]🗑 Remove Dormitory Block Supervisor[/]");
 
-                var data = db.GetRecordsByField("DormitoryBlockSupervisors", "SocialNumber", socialnumber);
-
-                if (data.Count() > 0)
+                while (true)
                 {
-                    var answ = AnsiConsole.Ask<string>($"A dormitorySupervisor with SocialNumber: {socialnumber} & Name: {data[0]["FullName"]} found. Are you sure to remove? (Y/N) ");
+                    string socialNumber = AnsiConsole.Ask<string>("Enter the social number of supervisor you want to remove: ");
 
-                    if (answ.ToLower() == "y")
+                    if (ENUserInterFace.checkback(socialNumber))
                     {
-                        bool done = DormitoryBlockSupervisorManager.RemoveDormitoryBlockSupervisor(socialnumber);
-                        if (done)
-                        {
-                            AnsiConsole.MarkupLine("[green]Dormitory Block Supervisor deleted successfully.[/]");
-                        }
-                        else
-                        {
-                            AnsiConsole.MarkupLine("[red]Failed to delete. Please try again.[/]");
-                        }
-                        Thread.Sleep(3000);
                         ENUserInterFace.blocksupervisormngmnt();
+                        return;
                     }
-                    else if (answ.ToLower() == "n")
+
+                    var data = db.GetRecordsByField("DormitoryBlockSupervisors", "SocialNumber", socialNumber);
+
+                    if (data.Count == 0)
+                    {
+                        AnsiConsole.MarkupLine($"[red]No Dormitory Block Supervisor found with SocialNumber: {socialNumber}![/]");
+                        Thread.Sleep(2500);
+                        continue;
+                    }
+
+                    string fullName = data[0].ContainsKey("FullName") ? data[0]["FullName"].ToString() : "Unknown";
+                    
+
+                    AnsiConsole.MarkupLine($"\n[bold green]Supervisor found:[/]\n  [blue]Name:[/] {fullName}");
+
+                    string answ = AnsiConsole.Ask<string>("Are you sure to remove this supervisor? (Y/N): ").Trim().ToLower();
+
+                    if (answ == "y")
+                    {
+                        bool deleted = false;
+
+                        AnsiConsole.Status()
+                            .Spinner(Spinner.Known.Dots)
+                            .SpinnerStyle(Style.Parse("yellow"))
+                            .Start("Removing supervisor...", ctx =>
+                            {
+                                Thread.Sleep(1500);
+                                deleted = DormitoryBlockSupervisorManager.RemoveDormitoryBlockSupervisor(socialNumber);
+                            });
+
+                        if (deleted)
+                            AnsiConsole.MarkupLine("[green]✅ Dormitory Block Supervisor deleted successfully.[/]");
+                        else
+                            AnsiConsole.MarkupLine("[red]❌ Failed to delete. Please try again.[/]");
+
+                        Thread.Sleep(2500);
+                        ENUserInterFace.blocksupervisormngmnt();
+                        return;
+                    }
+                    else if (answ == "n")
                     {
                         ENUserInterFace.blocksupervisormngmnt();
+                        return;
                     }
                     else
                     {
-                        AnsiConsole.MarkupLine("[red]Unknown command. Please retry...[/]");
-                        Thread.Sleep(3000);
-                        RemoveBlockSupervisor();
+                        AnsiConsole.MarkupLine("[red]❗️ Invalid input. Please enter 'Y' or 'N'.[/]");
+                        Thread.Sleep(2000);
                     }
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine($"[red]No Dormitory Block Supervisor found with SocialNumber: {socialnumber}![/]");
-                    Thread.Sleep(3000);
-                    RemoveBlockSupervisor();
                 }
             }
             catch (Exception)
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                AnsiConsole.MarkupLine($"[red]⚠️ An error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.blocksupervisormngmnt();
             }
@@ -2972,39 +4263,64 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Update Dormitory Block Supervisor infomations[/]");
-                string SoicalNumber = AnsiConsole.Ask<string>("Enter Dormitory Block Supervisor's SocialNumber : ");
-                if (ENUserInterFace.checkback(SoicalNumber)) ENUserInterFace.blocksupervisormngmnt();
-                var suprevisorRecord = db.GetRecordsByField("DormitoryBlockSupervisors", "SocialNumber", SoicalNumber);
-                if (suprevisorRecord == null || suprevisorRecord.Count == 0)
+                AnsiConsole.MarkupLine("[bold blue]✏️ Updating Dormitory Block Supervisor Information[/]");
+                while (true)
                 {
-                    AnsiConsole.MarkupLine($"[red]No such a dormitory Block Supervisor with SocialNumber : {SoicalNumber} ![/]");
-                    Thread.Sleep(3000);
-                    UpdateBlockSupervisor();
-                }
-                string newPhone = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Phone Number :(if you don't want to change it,leave it blank) ").AllowEmpty());
-                if (ENUserInterFace.checkback(newPhone)) ENUserInterFace.blocksupervisormngmnt();
-                var newAddress = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Address :(if you don't want to change it,leave it blank) ").AllowEmpty());
-                if (ENUserInterFace.checkback(newAddress)) ENUserInterFace.blocksupervisormngmnt();
-                string newrole = AnsiConsole.Prompt(new TextPrompt<string>("Enter New Role :(if you don't want to change it,leave it blank) ").AllowEmpty());
-                if (ENUserInterFace.checkback(newrole)) ENUserInterFace.blocksupervisormngmnt();
-                bool done = DormitoryBlockSupervisorManager.UpdateDormitoryBlockSupervisor(SoicalNumber, newPhone, newAddress, newrole);
-                if (done)
-                {
-                    AnsiConsole.MarkupLine("[green]Informations updated successfully.[/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.blocksupervisormngmnt();
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine("[red]Updating information failed, please try later [/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.blocksupervisormngmnt();
+                    string socialNumber = AnsiConsole.Ask<string>("Enter Dormitory Block Supervisor's Social Number: ");
+                    if (ENUserInterFace.checkback(socialNumber))
+                    {
+                        ENUserInterFace.blocksupervisormngmnt();
+                        return;
+                    }
+
+                    var supervisorRecord = db.GetRecordsByField("DormitoryBlockSupervisors", "SocialNumber", socialNumber);
+                    if (supervisorRecord == null || supervisorRecord.Count == 0)
+                    {
+                        AnsiConsole.MarkupLine($"[red]❌ No dormitory Block Supervisor found with Social Number: {socialNumber}[/]");
+                        Thread.Sleep(3000);
+                        continue;
+                    }
+
+                    string newPhone = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Phone Number (leave blank to keep current): ").AllowEmpty());
+                    if (ENUserInterFace.checkback(newPhone))
+                    {
+                        ENUserInterFace.blocksupervisormngmnt();
+                        return;
+                    }
+
+                    string newAddress = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Address (leave blank to keep current): ").AllowEmpty());
+                    if (ENUserInterFace.checkback(newAddress))
+                    {
+                        ENUserInterFace.blocksupervisormngmnt();
+                        return;
+                    }
+
+                    string newRole = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Role (leave blank to keep current): ").AllowEmpty());
+                    if (ENUserInterFace.checkback(newRole))
+                    {
+                        ENUserInterFace.blocksupervisormngmnt();
+                        return;
+                    }
+
+                    bool done = AnsiConsole.Status()
+                        .Start("Updating supervisor information...", ctx =>
+                        {
+                            Thread.Sleep(1500);
+                            return DormitoryBlockSupervisorManager.UpdateDormitoryBlockSupervisor(socialNumber, newPhone, newAddress, newRole);
+                        });
+
+                    if (done)
+                        AnsiConsole.MarkupLine("[green]✅ Information updated successfully.[/]");
+                    else
+                        AnsiConsole.MarkupLine("[red]❌ Failed to update information. Please try again later.[/]");
                 }
             }
             catch (Exception)
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
+            }
+            finally
+            {
                 Thread.Sleep(3000);
                 ENUserInterFace.blocksupervisormngmnt();
             }
@@ -3013,80 +4329,111 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Show all Dormitory Block Supervisors[/]");
+                AnsiConsole.MarkupLine("[bold blue]📋 Show All Dormitory Block Supervisors[/]");
                 DormitoryBlockSupervisorManager.ShowAllBlockSupervisors();
             }
             catch (Exception)
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.blocksupervisormngmnt();
             }
         }
-        //
+        //asset
         public static void RegisterNewEquipment()
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Dormitories(remeber ID)[/]");
+                AnsiConsole.MarkupLine("[bold blue]🏨 Dormitories (remember ID)[/]");
                 db.ShowAllrecords("Dormitories", false);
-                AnsiConsole.MarkupLine("[blue]Blocks(remeber ID)[/]");
+
+                AnsiConsole.MarkupLine("[bold blue]🏢 Blocks (remember ID)[/]");
                 db.ShowAllrecords("Blocks", false);
-                AnsiConsole.MarkupLine("[blue]Registering a New Equipment[/]");
+
+                AnsiConsole.MarkupLine("[bold yellow]🆕 Registering a New Equipment[/]");
+
                 string type = AnsiConsole.Prompt(
-                new SelectionPrompt<string>()
-                    .Title("[blue]Select the type of equipment to register:[/]")
-                    .PageSize(10)
-                    .MoreChoicesText("[grey](Use arrow keys to scroll)[/]")
-                    .AddChoices(new[] {
-                        "Fridge",
-                        "Desk",
-                        "Chair",
-                        "Bed",
-                        "Locker"
-                    }));
+                    new SelectionPrompt<string>()
+                        .Title("[blue]🔧 Select the type of equipment to register:[/]")
+                        .PageSize(10)
+                        .MoreChoicesText("[grey](Use arrow keys to scroll)[/]")
+                        .AddChoices(new[] {
+                    "🧊 Fridge",
+                    "🪑 Desk",
+                    "💺 Chair",
+                    "🛏️ Bed",
+                    "🔒 Locker"
+                        }));
+
                 string condition = AnsiConsole.Prompt(
-                new SelectionPrompt<string>()
-                    .Title("[blue]Select the Condition of Equipment:[/]")
-                    .PageSize(10)
-                    .MoreChoicesText("[grey](Use arrow keys to scroll)[/]")
-                    .AddChoices(new[] {
-                        "intact",
-                        "broken",
-                        "repairing"
-                    }));
-                string blockid = AnsiConsole.Ask<string>("Enter ID of the Block the Equipment Belongs to: ");
-                if (ENUserInterFace.checkback(blockid)) ENUserInterFace.equipmentmngmnt();
-                string dormid = AnsiConsole.Ask<string>("Enter ID of the Dormitory the Equipment Belongs to: ");
-                if (ENUserInterFace.checkback(dormid)) ENUserInterFace.equipmentmngmnt();
-                Equipment NewEquipment = new Equipment(type, Condition.Intact, int.Parse(blockid), int.Parse(dormid));
+                    new SelectionPrompt<string>()
+                        .Title("[blue]🔍 Select the condition of equipment:[/]")
+                        .PageSize(10)
+                        .MoreChoicesText("[grey](Use arrow keys to scroll)[/]")
+                        .AddChoices(new[] {
+                    "✅ Intact",
+                    "❌ Broken",
+                    "🔧 Repairing"
+                        }));
 
-                if (condition.ToLower() == "broken")
-                {
-                    NewEquipment._condition = Condition.Broken;
-                }
-                else if (condition.ToLower() == "repairing")
-                {
-                    NewEquipment._condition = Condition.Reparing;
-                }
+                string blockidStr = AnsiConsole.Ask<string>("🏢 Enter ID of the Block the equipment belongs to: ");
+                if (ENUserInterFace.checkback(blockidStr)) ENUserInterFace.equipmentmngmnt();
 
-                bool done = EquipmentManager.addEquipmentToDB(NewEquipment);
-                if (done)
+                if (!int.TryParse(blockidStr, out int blockid))
                 {
-                    AnsiConsole.MarkupLine("[green]Equipment Added Successfully.[/]");
+                    AnsiConsole.MarkupLine("[red]❗️ Invalid Block ID. Please enter a valid number.[/]");
                     Thread.Sleep(3000);
                     ENUserInterFace.equipmentmngmnt();
+                    return;
                 }
-                else
+
+                string dormidStr = AnsiConsole.Ask<string>("🏨 Enter ID of the Dormitory the equipment belongs to: ");
+                if (ENUserInterFace.checkback(dormidStr)) ENUserInterFace.equipmentmngmnt();
+
+                if (!int.TryParse(dormidStr, out int dormid))
                 {
-                    AnsiConsole.MarkupLine("[red]Adding Equipment Failed, Try Again.[/]");
-                    Thread.Sleep(40000);
+                    AnsiConsole.MarkupLine("[red]❗️ Invalid Dormitory ID. Please enter a valid number.[/]");
+                    Thread.Sleep(3000);
                     ENUserInterFace.equipmentmngmnt();
+                    return;
                 }
+
+                Condition cond = Condition.Intact;
+                if (condition.Contains("Broken")) cond = Condition.Broken;
+                else if (condition.Contains("Repairing")) cond = Condition.Reparing;
+
+                string cleanedType = type.Substring(type.IndexOf(' ') + 1);
+
+                Equipment NewEquipment = new Equipment(cleanedType, cond, blockid, dormid);
+
+                AnsiConsole.Status()
+                    .Start("📦 [green]Registering equipment...[/]", ctx =>
+                    {
+                        Thread.Sleep(1000);
+                        bool done = EquipmentManager.addEquipmentToDB(NewEquipment);
+
+                        if (done)
+                        {
+                            ctx.Status("✅ [bold green]Equipment added successfully![/]");
+                            ctx.Spinner(Spinner.Known.Star);
+                            Thread.Sleep(1000);
+                            AnsiConsole.MarkupLine("\n[bold green]🎉 Equipment was successfully registered.[/]");
+                        }
+                        else
+                        {
+                            ctx.Status("❌ [bold red]Failed to add equipment.[/]");
+                            ctx.Spinner(Spinner.Known.Dots2);
+                            Thread.Sleep(1000);
+                            AnsiConsole.MarkupLine("\n[red]⚠️ Adding equipment failed, please try again.[/]");
+                        }
+                    });
+
+                Thread.Sleep(2000);
+                ENUserInterFace.equipmentmngmnt();
             }
             catch (Exception)
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
+                AnsiConsole.MarkupLine("[red]⚠️ An unexpected error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.equipmentmngmnt();
             }
@@ -3095,31 +4442,48 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Add the Desired Equipment to Room[/]");
-                AnsiConsole.MarkupLine("[blue]Rooms(remeber ID)[/]");
+                AnsiConsole.MarkupLine("[bold blue]🛋️ Add the Desired Equipment to Room[/]");
+                AnsiConsole.MarkupLine("[bold blue]🏠 Rooms (remember ID)[/]");
                 db.ShowAllrecords("Rooms", false);
-                string roomid = AnsiConsole.Ask<string>("Chosen Room ID: ");
-                if (ENUserInterFace.checkback(roomid)) ENUserInterFace.equipmentmngmnt();
-                string propertynumber = AnsiConsole.Ask<string>("Property Number of Equipment: ");
-                if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.equipmentmngmnt();
-                bool done = EquipmentManager.assignEquipmentToRoom(propertynumber, roomid);
-                if (done)
-                {
-                    AnsiConsole.MarkupLine("[green]Equipment Assigned Successfully.[/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.equipmentmngmnt();
-                }
-                else
-                {
-                    AnsiConsole.Markup("[red]Assigning Equipment Failed, Please Try Again.");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.equipmentmngmnt();
-                }
 
+                string roomidStr = AnsiConsole.Ask<string>("🏷️ Chosen Room ID: ");
+                if (ENUserInterFace.checkback(roomidStr)) ENUserInterFace.equipmentmngmnt();
+
+                if (!int.TryParse(roomidStr, out int roomid))
+                {
+                    AnsiConsole.MarkupLine("[red]❗️ Invalid Room ID. Please enter a valid number.[/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.equipmentmngmnt();
+                    return;
+                }
+                db.ShowAllrecords("Equipment",false);
+                string propertynumber = AnsiConsole.Ask<string>("📦 Property Number of Equipment: ");
+                if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.equipmentmngmnt();
+
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("green"))
+                    .Start("🔄 Assigning equipment to room...", ctx =>
+                    {
+                        Thread.Sleep(1000);
+                        EquipmentManager.assignEquipmentToRoom(propertynumber, roomid.ToString());
+                    });
+
+                AnsiConsole.MarkupLine("[green]✅ Successfully Assigned Equipment To Room.[/]");
+                Thread.Sleep(3000);
+            }
+            catch (ArgumentException e)
+            {
+                AnsiConsole.MarkupLine($"[red]❌ Assigning Equipment Failed: {e.Message}[/]");
+                Thread.Sleep(3000);
             }
             catch (Exception)
             {
+                AnsiConsole.MarkupLine("[red]⚠️ An unexpected error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
+            }
+            finally
+            {
                 ENUserInterFace.equipmentmngmnt();
             }
         }
@@ -3130,26 +4494,55 @@ namespace Dormitory
                 AnsiConsole.MarkupLine("[blue]Add the Desired Equipment to Student's Equipment[/]");
                 string socialid = AnsiConsole.Ask<string>("Enter Student's Social ID: ");
                 if (ENUserInterFace.checkback(socialid)) ENUserInterFace.equipmentmngmnt();
-                string propertynumber = AnsiConsole.Ask<string>("Property Number of Equipment: ");
-                if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.equipmentmngmnt();
-                bool done = EquipmentManager.assignEquipmentToStudent(propertynumber, socialid);
-                if (done)
+
+                if (string.IsNullOrWhiteSpace(socialid))
                 {
-                    AnsiConsole.MarkupLine("[green]Equipment Assigned Successfully.[/]");
+                    AnsiConsole.MarkupLine("[red]Social ID cannot be empty.[/]");
                     Thread.Sleep(3000);
                     ENUserInterFace.equipmentmngmnt();
-                }
-                else
-                {
-                    AnsiConsole.Markup("[red]Assigning Equipment Failed, Please Try Again.");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.equipmentmngmnt();
+                    return;
                 }
 
+                string propertynumber = AnsiConsole.Ask<string>("Property Number of Equipment: ");
+                if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.equipmentmngmnt();
+
+                if (string.IsNullOrWhiteSpace(propertynumber))
+                {
+                    AnsiConsole.MarkupLine("[red]Property Number cannot be empty.[/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.equipmentmngmnt();
+                    return;
+                }
+
+                bool done = false;
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("yellow"))
+                    .Start("Assigning equipment to student...", ctx =>
+                    {
+                        Thread.Sleep(1500);
+                        EquipmentManager.assignEquipmentToStudent(propertynumber, socialid);
+                        done = true;
+                    });
+
+                if (done)
+                {
+                    AnsiConsole.MarkupLine("[green]✅ Equipment Assigned Successfully.[/]");
+                    Thread.Sleep(3000);
+                }
+            }
+            catch (ArgumentException e)
+            {
+                AnsiConsole.MarkupLine($"[red]Assigning Equipment Failed: {e.Message}[/]");
+                Thread.Sleep(3000);
             }
             catch (Exception)
             {
+                AnsiConsole.MarkupLine("[red]An unexpected error occurred. Returning to menu...[/]");
                 Thread.Sleep(3000);
+            }
+            finally
+            {
                 ENUserInterFace.equipmentmngmnt();
             }
         }
@@ -3157,31 +4550,39 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Move the Desired Equipment to Another Room[/]");
-                AnsiConsole.MarkupLine("[blue]Rooms(remeber ID)[/]");
+                AnsiConsole.MarkupLine("[bold blue]🔄 Move the Desired Equipment to Another Room[/]");
+                AnsiConsole.MarkupLine("[blue]Rooms (remember ID)[/]");
                 db.ShowAllrecords("Rooms", false);
+
                 string roomid = AnsiConsole.Ask<string>("Enter Destination Room's ID: ");
                 if (ENUserInterFace.checkback(roomid)) ENUserInterFace.equipmentmngmnt();
+
                 string propertynumber = AnsiConsole.Ask<string>("Property Number of Equipment: ");
                 if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.equipmentmngmnt();
-                bool done = EquipmentManager.exchangeEquipmentBetweenRooms(propertynumber, roomid);
+
+                bool done = false;
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("yellow"))
+                    .Start("Moving equipment... ⌛️", ctx =>
+                    {
+                        Thread.Sleep(1500);
+                        EquipmentManager.exchangeEquipmentBetweenRooms(propertynumber, roomid);
+                        done = true;
+                    });
+
                 if (done)
                 {
-                    AnsiConsole.MarkupLine("[green]Equipment Moved Successfully.[/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.equipmentmngmnt();
+                    AnsiConsole.MarkupLine("[green]✅ Equipment Moved Successfully.[/]");
                 }
-                else
-                {
-                    AnsiConsole.Markup("[red]Moving Equipment Failed, Please Try Again.");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.equipmentmngmnt();
-                }
-
             }
-            catch (Exception)
+            catch (ArgumentException e)
             {
+                AnsiConsole.MarkupLine($"[red]🚫 Moving Equipment Failed: {e.Message}[/]");
                 Thread.Sleep(3000);
+            }
+            finally
+            {
                 ENUserInterFace.equipmentmngmnt();
             }
         }
@@ -3189,601 +4590,73 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Change Student's Equipment[/]");
+                AnsiConsole.MarkupLine("[bold blue]🔄 Change Student's Equipment[/]");
+
                 string socialid = AnsiConsole.Ask<string>("Enter Student's Social ID: ");
                 if (ENUserInterFace.checkback(socialid)) ENUserInterFace.equipmentmngmnt();
+
                 string oldpropertynumber = AnsiConsole.Ask<string>("Property Number of The Current Equipment: ");
                 if (ENUserInterFace.checkback(oldpropertynumber)) ENUserInterFace.equipmentmngmnt();
+
                 string newpropertynumber = AnsiConsole.Ask<string>("Property Number of Equipment to Replace With The Current Equipment: ");
                 if (ENUserInterFace.checkback(newpropertynumber)) ENUserInterFace.equipmentmngmnt();
-                bool done = EquipmentManager.changeStudentEquipment(oldpropertynumber, newpropertynumber, socialid);
+
+                bool done = false;
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("yellow"))
+                    .Start("Processing equipment change... ⏳", ctx =>
+                    {
+                        Thread.Sleep(1500);
+                        EquipmentManager.changeStudentEquipment(oldpropertynumber, newpropertynumber, socialid);
+                        done = true;
+                    });
+
                 if (done)
                 {
-                    AnsiConsole.MarkupLine("[green]Student's Equipment Changed Successfully.[/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.equipmentmngmnt();
+                    AnsiConsole.MarkupLine("[green]✅ Student's Equipment Changed Successfully.[/]");
                 }
-                else
-                {
-                    AnsiConsole.Markup("[red]Changing Equipment Failed, Please Try Again.");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.equipmentmngmnt();
-                }
-
             }
-            catch (Exception)
+            catch (ArgumentException e)
             {
+                AnsiConsole.MarkupLine($"[red]🚫 Changing Equipment Failed: {e.Message}[/]");
                 Thread.Sleep(3000);
+            }
+            finally
+            {
                 ENUserInterFace.equipmentmngmnt();
-            }
-        }
-        public static void showAssignedEquipmentToRooms()
-        {
-            List<Dictionary<string, object>> allRooms = Program.db.GetAllRecords("Rooms");
-            foreach (Dictionary<string, object> room in allRooms)
-            {
-                WriteLine($"All equipment in Room :{room["RoomNumber"]}, located in Floor: {room["FloorNumber"]} in Block {room["BlockId"]}");
-                EquipmentManager.equipmentAssignedToRoom(Convert.ToInt32(room["Id"]));
-                WriteLine("-----------------");
-            }
-        }
-        public static void showAssignedEquipmentToStudents()
-        {
-            List<Dictionary<string, object>> allStudents = Program.db.GetAllRecords("Students");
-            foreach (Dictionary<string, object> student in allStudents)
-            {
-                WriteLine($"All Equipment that belong to student {student["FullName"]}, in Room {student["RoomId"]}, in Block {student["BlockId"]}");
-                EquipmentManager.equipmentAssignedToStudent(Convert.ToInt32(student["Id"]));
-                WriteLine("-----------------");
-            }
-        }
-        public static void showBrokenEquipment()
-        {
-            WriteLine("List of broken equipment: ");
-            EquipmentManager.showEquipmentWithCondition(Condition.Broken);
-        }
-        public static void showRepairingEquipment()
-        {
-            WriteLine("List of equipment that are being repaired: ");
-            EquipmentManager.showEquipmentWithCondition(Condition.Reparing);
-        }
-        public static void showEmptyRooms()
-        {
-            List<Dictionary<string, object>> emptyRooms = Program.db.GetRecordsByField("Rooms", "Capacity", 0);
-            foreach (Dictionary<string, object> room in emptyRooms)
-            {
-                WriteLine($"Room: {room["RoomNumber"]}, located in Floor: {room["FloorNumber"]}, in Block: {room["BlockId"]}");
-            }
-        }
-        public static void showFullRooms()
-        {
-            List<Dictionary<string, object>> fullRooms = Program.db.GetRecordsByField("Rooms", "Capacity", MAX_ROOM_CAPACITY);
-            foreach (Dictionary<string, object> room in fullRooms)
-            {
-                WriteLine($"Room: {room["RoomNumber"]}, located in Floor: {room["FloorNumber"]}, in Block: {room["BlockId"]}");
-            }
-        }
-        public static void showBlockRemainingCapacity()
-        {
-            List<Dictionary<string, object>> allBlocks = Program.db.GetAllRecords("Blocks");
-            foreach (Dictionary<string, object> block in allBlocks)
-            {
-                List<Dictionary<string, object>> blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
-                foreach (Dictionary<string, object> room in blockRooms)
-                {
-                    int capacity = MAX_ROOM_CAPACITY - Convert.ToInt32(room["Capacity"]);
-                    WriteLine($"Room: {room["RoomNumber"]}, in Block: {block["Name"]}, in Dormitory: {block["DormitoryId"]}, has {capacity} remaining space.");
-                }
-            }
-        }
-        public static void showOverallAccommodationReport()
-        {
-            List<Dictionary<string, object>> allDorms = Program.db.GetAllRecords("Dormitories");
-            foreach (Dictionary<string, object> dorm in allDorms)
-            {
-                List<Dictionary<string, object>> dormBlocks = Program.db.GetRecordsByField("Blocks", "DormitoryId", Convert.ToInt32(dorm["Id"]));
-                foreach (Dictionary<string, object> block in dormBlocks)
-                {
-                    List<Dictionary<string, object>> blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
-                    foreach (Dictionary<string, object> room in blockRooms)
-                    {
-                        List<Dictionary<string, object>> roomStudents = Program.db.GetRecordsByField("Students", "RoomId", Convert.ToInt32(room["Id"]));
-                        foreach (Dictionary<string, object> student in roomStudents)
-                        {
-                            WriteLine($"Student: {student["FullName"].ToString()} with Student ID: {student["StudentID"]}, in Room: {room["Name"]}, in Block: {block["Name"]}, in Dormitory: {dorm["Name"]}");
-                        }
-                        WriteLine("-------------");
-                    }
-                }
             }
         }
         public static void RequestRepair()
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Request Repair of an Equipment[/]");
+                AnsiConsole.MarkupLine("[bold blue]🛠️ Request Repair of an Equipment[/]");
                 string propertynumber = AnsiConsole.Ask<string>("Enter Property Number of Broken Equipment: ");
                 if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.maintenancemngmnt();
-                bool done = EquipmentManager.registerRepairRequest(propertynumber);
+
+                bool done = false;
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("yellow"))
+                    .Start("Registering repair request... 🔧", ctx =>
+                    {
+                        Thread.Sleep(1500);
+                        EquipmentManager.registerRepairRequest(propertynumber);
+                        done = true;
+                    });
+
                 if (done)
                 {
-                    AnsiConsole.MarkupLine("[green]Request for Repair of Equipment Registered Successfully.[/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.maintenancemngmnt();
-                }
-                else
-                {
-                    AnsiConsole.Markup("[red]Registering Repair Request for Equipment Failed, Please Try Again.");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.maintenancemngmnt();
-                }
-
-            }
-            catch (Exception)
-            {
-                Thread.Sleep(3000);
-                ENUserInterFace.maintenancemngmnt();
-            }
-        }
-        public static void showAllRepairRequests()
-        {
-            List<Dictionary<string, object>> allRepairRequests = Program.db.GetAllRecords("RepairRequests");
-            foreach (Dictionary<string, object> request in allRepairRequests)
-            {
-                Dictionary<string, object> equipment = Program.db.GetRecordsByField("Equipment", "PropertyNumber", Convert.ToInt32(request["PropertyNumber"]))[0];
-                Dictionary<string, object> room = Program.db.GetRecordsByField("Rooms", "Id", Convert.ToInt32(equipment["RoomId"]))[0];
-                Dictionary<string, object> block = Program.db.GetRecordsByField("Blocks", "Id", Convert.ToInt32(room["BlockId"]))[0];
-                if (equipment["OwnerId"] != DBNull.Value)
-                {
-                    Dictionary<string, object> student = Program.db.GetRecordsByField("Students", "Id", Convert.ToInt32(equipment["OwnerId"]))[0];
-                    WriteLine($"Request Number: {request["Id"]}, for a(n) {equipment["Type"]}, with Property Number: {request["PropertyNumber"]}, in Room: {room["RoomNumber"]}, in Block: {block["Name"]}, Owned By Student: {student["FullName"]}, with Student ID: {student["StudentID"]}");
-
-                }
-                else
-                {
-                    WriteLine($"Request Number: {request["Id"]}, for a(n) {equipment["Type"]}, with Property Number: {request["PropertyNumber"]}, in Room: {room["RoomNumber"]}, in Block: {block["Name"]}");
+                    AnsiConsole.MarkupLine("[green]✅ Request for Repair of Equipment Registered Successfully.[/]");
                 }
             }
-        }
-        //dormitory
-        public static void GetDormitoryInfo()
-        {
-            try
+            catch (ArgumentException e)
             {
-                AnsiConsole.MarkupLine("[blue]Register New dormitory[/]");
-                string FullName = AnsiConsole.Ask<string>("Name of dormitory : ");
-                if (ENUserInterFace.checkback(FullName)) ENUserInterFace.mainMenu();
-                string Address = AnsiConsole.Ask<string>("Address of dormitoy : ");
-                if (ENUserInterFace.checkback(Address)) ENUserInterFace.mainMenu();
-                getcap:
-                    string capcity = AnsiConsole.Ask<string>("Capacity of dormitory : ");
-                if (ENUserInterFace.checkback(capcity)) ENUserInterFace.mainMenu();
-                if(int.Parse(capcity) % 6 != 0)
-                {
-                    AnsiConsole.MarkupLine("[red]Dormitory capacity must be divisible by 6, as each room accommodates 6 students.[/]");
-                    Thread.Sleep(3000);
-                    goto getcap;
-                }
-                getres:
-                    string responsible = AnsiConsole.Ask<string>("Social number of responsible : ");
-                if (ENUserInterFace.checkback(responsible)) ENUserInterFace.mainMenu();
-                if (db.GetRecordsByField("DormitorySupervisors", "SocialNumber", responsible).Count() > 0)
-                {
-                    bool done = DormitoryManager.AddDormitory(FullName, Address, int.Parse(capcity), responsible);
-                    if (done)
-                    {
-                        AnsiConsole.MarkupLine("[green]Dormitory Created successflly.[/]");
-                        Thread.Sleep(3000);
-                        ENUserInterFace.dormitorymngmnt();
-                    }
-                    else
-                    {
-                        AnsiConsole.MarkupLine("[red]Creating dormitory failed, please try again .[/]");
-                        Thread.Sleep(3000);
-                        ENUserInterFace.dormitorymngmnt();
-                    }
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine("[red]The entered supervisors is assigned to another dormitory ,please try another one ... [/]");
-                    Thread.Sleep(3000);
-                    goto getres;
-                }
+                AnsiConsole.MarkupLine($"[red]🚫 Registering Repair Request Failed: {e.Message}[/]");
             }
-            catch (Exception)
+            finally
             {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
-                Thread.Sleep(3000);
-                ENUserInterFace.dormitorymngmnt();
-            }
-        }
-        public static void RemoveDormitory()
-        {
-            try
-            {
-                AnsiConsole.MarkupLine("[blue]Remove Dormitory[/]");
-                string name = AnsiConsole.Ask<string>("Enter Dormitory Name : ");
-                if (ENUserInterFace.checkback(name)) ENUserInterFace.dormitorymngmnt();
-
-                var data = db.GetRecordsByField("Dormitories", "Name", name);
-                if (data.Count > 0)
-                {
-                    var answ = AnsiConsole.Ask<string>($"An dormitory with Name : {name} & id : {data[0]["Id"]} found , are sure to remove ? (Y/N) ");
-                    if (answ.ToLower() == "y")
-                    {
-                        bool done = DormitoryManager.RemoveDormitory(name);
-                        if (done)
-                        {
-                            AnsiConsole.MarkupLine("[green]Dormitory deleted successfully.[/]");
-                            Thread.Sleep(3000);
-                            ENUserInterFace.dormitorymngmnt();
-                        }
-                    }
-                    else if (answ.ToLower() == "n")
-                    {
-                        ENUserInterFace.dormitorymngmnt();
-                    }
-                    else
-                    {
-                        AnsiConsole.MarkupLine("[red]unkonwn command,please retry again... [/]");
-                        Thread.Sleep(3000);
-                        RemoveDormitory();
-                    }
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine($"[red]No such a dormitory with name : {name} ![/]");
-                    Thread.Sleep(3000);
-                    RemoveDormitory();
-                }
-            }
-            catch (Exception)
-            {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
-                Thread.Sleep(3000);
-                ENUserInterFace.dormitorymngmnt();
-            }
-        }
-        public static void UpdateDormitoryInfo()
-        {
-            try
-            {
-                AnsiConsole.MarkupLine("[blue]Update Dormitory infomations[/]");
-                string name = AnsiConsole.Ask<string>("Enter Dormitory Name : ");
-                if (ENUserInterFace.checkback(name)) ENUserInterFace.dormitorymngmnt();
-                var dormitoryRecord = Program.db.GetRecordsByField("Dormitories", "Name", name);
-                if (dormitoryRecord == null || dormitoryRecord.Count == 0)
-                {
-                    AnsiConsole.MarkupLine($"[red]No such a dormitory with name : {name} ![/]");
-                    Thread.Sleep(3000);
-                    UpdateDormitoryInfo();
-                }
-                var newCapacity = AnsiConsole.Prompt(new TextPrompt<string>("Enter new capacity :(if you don't want to change it,leave it blank) ").AllowEmpty());
-                if (ENUserInterFace.checkback(newCapacity)) ENUserInterFace.dormitorymngmnt();
-                var newAddress = AnsiConsole.Prompt(new TextPrompt<string>("Enter new address :(if you don't want to change it,leave it blank) ").AllowEmpty());
-                if (ENUserInterFace.checkback(newAddress)) ENUserInterFace.dormitorymngmnt();
-                var newResponsible = AnsiConsole.Prompt(new TextPrompt<string>("Enter new responsible's social number :(if you don't want to change it,leave it blank) ").AllowEmpty());
-                if (ENUserInterFace.checkback(newResponsible)) ENUserInterFace.dormitorymngmnt();
-                bool done = DormitoryManager.UpdateDormitoryInfoWithCurrentData(name, newCapacity, newAddress, newResponsible);
-                if (done)
-                {
-                    AnsiConsole.MarkupLine("[green]Informations updated successfully.[/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.dormitorymngmnt();
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine("[red]Updating information failed, please try later [/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.mainMenu();
-                }
-            }
-            catch (Exception)
-            {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
-                Thread.Sleep(3000);
-                ENUserInterFace.dormitorymngmnt();
-            }
-        }
-        public static void ShowAllDormitory()
-        {
-            try
-            {
-                AnsiConsole.MarkupLine("[blue]Show all Dormitories[/]");
-                DormitoryManager.ShowAlldormitories();
-            }
-            catch (Exception)
-            {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
-                Thread.Sleep(3000);
-                ENUserInterFace.dormitorymngmnt();
-            }
-
-        }
-        //block
-        public static void GetBlockInfo()
-        {
-            try
-            {
-                AnsiConsole.MarkupLine("[blue]Dormitories(remeber ID)[/]");
-                db.ShowAllrecords("Dormitories",false);
-                AnsiConsole.MarkupLine("[blue]Register New Block[/]");
-                string dormitoryId = AnsiConsole.Ask<string>("Dormitory choosen ID : ");
-                if (ENUserInterFace.checkback(dormitoryId)) ENUserInterFace.blockmngmnt();
-                var dormitory = db.GetRecordsByField("Dormitories", "Id", dormitoryId)[0];
-                int dormCapacity = int.Parse(dormitory["Capacity"].ToString());
-                string FullName = AnsiConsole.Ask<string>("Name of Block : ");
-                if (ENUserInterFace.checkback(FullName)) ENUserInterFace.blockmngmnt();
-                string Floor = AnsiConsole.Ask<string>("Number of floors : ");
-                if (ENUserInterFace.checkback(Floor)) ENUserInterFace.blockmngmnt();
-                getroom:
-                    string Room = AnsiConsole.Ask<string>("Number of rooms : ");
-                if (ENUserInterFace.checkback(Room)) ENUserInterFace.blockmngmnt();
-                string capacity = (int.Parse(Room) * 6).ToString();
-                if (int.Parse(capacity) > dormCapacity)
-                {
-                    AnsiConsole.MarkupLine("[gray]Block capacity cannot exceed dirmiroy capacity, please re-enter the number of rooms");
-                    Thread.Sleep(3000);
-                    goto getroom;
-                }
-                getres:
-                    string responsible = AnsiConsole.Ask<string>("Social Nuumber of resposible : ");
-                if (ENUserInterFace.checkback(responsible)) ENUserInterFace.blockmngmnt();
-                if (db.GetRecordsByField("DormitoryBlockSupervisors", "SocialNumber", responsible).Count() > 0)
-                {
-                    bool done = BlocksManager.AddBlock(dormitoryId, FullName, Floor, Room, responsible);
-                    if (done)
-                    {
-                        AnsiConsole.MarkupLine("[green]Block Created successflly.[/]");
-                        Thread.Sleep(3000);
-                        ENUserInterFace.blockmngmnt();
-                    }
-                    else
-                    {
-                        AnsiConsole.Markup("[red]Creating Block failed, please try again .");
-                        Thread.Sleep(3000);
-                        ENUserInterFace.dormitorymngmnt();
-                    }
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine("[red]The entered Block supervisors is assigned to another dormitory ,please try another one ... [/]");
-                    Thread.Sleep(3000);
-                    goto getres;
-                }
-
-            }
-            catch (Exception)
-            {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
-                Thread.Sleep(3000);
-                ENUserInterFace.blockmngmnt();
-            }
-        }
-        public static void RemoveBlock()
-        {
-            try
-            {
-                AnsiConsole.MarkupLine("[blue]Remove Block[/]");
-                string name = AnsiConsole.Ask<string>("Enter Block Name : ");
-                if (ENUserInterFace.checkback(name)) ENUserInterFace.blockmngmnt();
-
-                var data = db.GetRecordsByField("Blocks", "Name", name);
-                if (data.Count > 0)
-                {
-                    var answ = AnsiConsole.Ask<string>($"A block with Name : {name} & id : {data[0]["Id"]} found , are sure to remove ? (Y/N) ");
-                    if (answ.ToLower() == "y")
-                    {
-                        bool done = BlocksManager.RemoveBlock(name);
-                        if (done)
-                        {
-                            AnsiConsole.MarkupLine("[green]Block deleted successfully.[/]");
-                            Thread.Sleep(3000);
-                            ENUserInterFace.blockmngmnt();
-                        }
-                    }
-                    else if (answ.ToLower() == "n")
-                    {
-                        ENUserInterFace.blockmngmnt();
-                    }
-                    else
-                    {
-                        AnsiConsole.MarkupLine("[red]unkonwn command,please retry again... [/]");
-                        Thread.Sleep(3000);
-                        RemoveBlock();
-                    }
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine($"[red]No such a block with name : {name} ![/]");
-                    Thread.Sleep(3000);
-                    RemoveBlock();
-                }
-            }
-            catch (Exception)
-            {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
-                Thread.Sleep(3000);
-                ENUserInterFace.blockmngmnt();
-            }
-        }
-        public static void UpdateBlockInfo()
-        {
-            try
-            {
-                AnsiConsole.MarkupLine("[blue]Update Block infomations[/]");
-                string name = AnsiConsole.Ask<string>("Enter Block Name : ");
-                if (ENUserInterFace.checkback(name)) ENUserInterFace.blockmngmnt();
-                var blockRecord = Program.db.GetRecordsByField("Blocks", "Name", name);
-                if (blockRecord == null || blockRecord.Count == 0)
-                {
-                    AnsiConsole.MarkupLine($"[red]No such a block with name : {name} ![/]");
-                    Thread.Sleep(3000);
-                    UpdateBlockInfo();
-                }
-                var newfloor = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Number of floor(s) :(if you don't want to change it,leave it blank) ").AllowEmpty());
-                if (ENUserInterFace.checkback(newfloor)) ENUserInterFace.blockmngmnt();
-                var newroom = AnsiConsole.Prompt(new TextPrompt<string>("Enter new Number of room(s) (if you don't want to change it,leave it blank) ").AllowEmpty());
-                if (ENUserInterFace.checkback(newroom)) ENUserInterFace.blockmngmnt();
-                var newResponsible = AnsiConsole.Prompt(new TextPrompt<string>("Enter new responsible's social number :(if you don't want to change it,leave it blank) ").AllowEmpty());
-                if (ENUserInterFace.checkback(newResponsible)) ENUserInterFace.blockmngmnt();
-                bool done = BlocksManager.UpdateBlockInfoWithCurrentData(name, newfloor, newroom, newResponsible);
-                if (done)
-                {
-                    AnsiConsole.MarkupLine("[green]Informations updated successfully.[/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.blockmngmnt();
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine("[red]Updating information failed, please try later [/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.mainMenu();
-                }
-            }
-            catch (Exception)
-            {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
-                Thread.Sleep(3000);
-                ENUserInterFace.dormitorymngmnt();
-            }
-        }
-        public static void ShowAllBlocks()
-        {
-            try
-            {
-                AnsiConsole.MarkupLine("[blue]Show all Blocks[/]");
-                BlocksManager.ShowAllblocks();
-            }
-            catch (Exception)
-            {
-                AnsiConsole.MarkupLine("[red]An error occurred. Returning to menu...[/]");
-                Thread.Sleep(3000);
-                ENUserInterFace.blockmngmnt();
-            }
-        }
-        //
-        public static void showAllEquipmentAssignedToEachRoom()
-        {
-            List<Dictionary<string, object>> allDorms = Program.db.GetAllRecords("Dormitories");
-            if (allDorms.Count == 0)
-            {
-                AnsiConsole.MarkupLine("[red]No records found in table Dormitories[/]");
-                return;
-            }
-            foreach (Dictionary<string, object> dorm in allDorms)
-            {
-                List<Dictionary<string, object>> dormBlocks = Program.db.GetRecordsByField("Blocks", "DormitoryId", Convert.ToInt32(dorm["Id"]));
-                if (dormBlocks.Count == 0)
-                {
-                    AnsiConsole.MarkupLine("[red]No records found in table Blocks[/]");
-                    return;
-                }
-                foreach (Dictionary<string, object> block in dormBlocks)
-                {
-                    List<Dictionary<string, object>> blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
-                    if (blockRooms.Count == 0)
-                    {
-                        AnsiConsole.MarkupLine("[red]No records found in table Rooms[/]");
-                        return;
-                    }
-                    foreach (Dictionary<string, object> room in blockRooms)
-                    {
-                        List<Dictionary<string, object>> equipment = Program.db.GetRecordsByField("Equipment", "RoomId", Convert.ToInt32(room["Id"]));
-                        if (equipment.Count == 0)
-                        {
-                            AnsiConsole.MarkupLine("[red]No records found in table Equipment[/]");
-                            return;
-                        }
-                        foreach (Dictionary<string, object> equip in equipment)
-                        {
-                            AnsiConsole.WriteLine($"Equipment: {equip["Type"]} with PartNumber: {equip["PartNumber"]}, in Room: {room["Name"]}, in Block: {block["Name"]}, in Dormitory: {dorm["Name"]}");
-                        }
-                    }
-                }
-            }
-        }
-        public static void showAllEquipmentAssignedToEachStudent()
-        {
-            List<Dictionary<string, object>> allDorms = Program.db.GetAllRecords("Dormitories");
-            if (allDorms.Count == 0)
-            {
-                AnsiConsole.MarkupLine("[red]No records found in table Dormitories[/]");
-                return;
-            }
-            foreach (Dictionary<string, object> dorm in allDorms)
-            {
-                List<Dictionary<string, object>> dormBlocks = Program.db.GetRecordsByField("Blocks", "DormitoryId", Convert.ToInt32(dorm["Id"]));
-                if (dormBlocks.Count == 0)
-                {
-                    AnsiConsole.MarkupLine("[red]No records found in table Blocks[/]");
-                    return;
-                }
-                foreach (Dictionary<string, object> block in dormBlocks)
-                {
-                    List<Dictionary<string, object>> blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
-                    if (blockRooms.Count == 0)
-                    {
-                        AnsiConsole.MarkupLine("[red]No records found in table Rooms[/]");
-                        return;
-                    }
-                    foreach (Dictionary<string, object> room in blockRooms)
-                    {
-                        List<Dictionary<string, object>> student = Program.db.GetRecordsByField("Students", "RoomId", Convert.ToInt32(room["Id"]));
-                        if (student.Count == 0)
-                        {
-                            AnsiConsole.MarkupLine("[red]No records found in table Students[/]");
-                            return;
-                        }
-                        foreach (Dictionary<string, object> stu in student)
-                        {
-                            List<Dictionary<string, object>> equipment = Program.db.GetRecordsByField("Equipment", "OwnerId", Convert.ToInt32(stu["Id"]));
-                            if (equipment.Count == 0)
-                            {
-                                AnsiConsole.MarkupLine("[red]No records found in table Equipment[/]");
-                                return;
-                            }
-                            foreach (Dictionary<string, object> equip in equipment)
-                            {
-                                AnsiConsole.WriteLine($"Equipment: {equip["Type"]} with PartNumber: {equip["PartNumber"]},is for {stu["FullName"]}, in Room: {room["Name"]}, in Block: {block["Name"]}, in Dormitory: {dorm["Name"]}");
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        public static void showAllDefectiveAndInrepairEquipment()
-        {
-            AnsiConsole.MarkupLine("[blue]Show all defective and inrepair equipment[/]");
-            List<Dictionary<string, object>> allEquipment = Program.db.GetAllRecords("Equipment");
-            if (allEquipment.Count == 0)
-            {
-                AnsiConsole.MarkupLine("[red]No records found in table Equipment[/]");
-                return;
-            }
-            List<Dictionary<string, object>> BrokenEquipment = Program.db.GetRecordsByField("Equipment", "Condition", "Broken");
-            foreach (Dictionary<string, object> equipment in BrokenEquipment)
-            {
-                AnsiConsole.WriteLine($"The situation of Equipment: {equipment["Type"]} with PartNumber: {equipment["PartNumber"]}, and with PropertyNumber: {equipment["PropertyNumber"]}, is Broken");
-            }
-            List<Dictionary<string, object>> RepairEquipment = Program.db.GetRecordsByField("Equipment", "Condition", "Reparing");
-            foreach (Dictionary<string, object> equipment in RepairEquipment)
-            {
-                AnsiConsole.WriteLine($"The situation of Equipment: {equipment["Type"]} with PartNumber: {equipment["PartNumber"]}, and with PropertyNumber: {equipment["PropertyNumber"]}, is Reparing");
-            }
-        }
-        public static void CheckRepairStatus()
-        {
-            try
-            {
-                AnsiConsole.MarkupLine("[blue]Checking Repair Request of an Equipment[/]");
-                string propertynumber = AnsiConsole.Ask<string>("Enter Property Number of The Equipment Being Repaired: ");
-                if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.maintenancemngmnt();
-                Program.db.ShowRecordsByField("RepairRequests", "PropertyNumber", propertynumber);
-            }
-            catch (Exception)
-            {
-                AnsiConsole.Markup("[red]Checking Status of Repairing Equipment Failed, Please Try Again.");
                 Thread.Sleep(3000);
                 ENUserInterFace.maintenancemngmnt();
             }
@@ -3792,39 +4665,936 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Changing Condition of Equipment to Broken[/]");
+                AnsiConsole.MarkupLine("[bold blue]🔧 Changing Condition of Equipment to Broken[/]");
                 string propertynumber = AnsiConsole.Ask<string>("Enter Property Number of Broken Equipment: ");
                 if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.maintenancemngmnt();
-                bool done = EquipmentManager.changeEquipmentCondition(propertynumber, Condition.Broken);
+
+                bool done = false;
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("yellow"))
+                    .Start("Updating equipment condition... 🛠️", ctx =>
+                    {
+                        Thread.Sleep(1500);
+                        EquipmentManager.changeEquipmentCondition(propertynumber, Condition.Broken);
+                        done = true;
+                    });
+
                 if (done)
                 {
-                    AnsiConsole.MarkupLine("[green]Equipment's Condition Successfully Changed to Broken.[/]");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.maintenancemngmnt();
+                    AnsiConsole.MarkupLine("[green]✅ Equipment's Condition Successfully Changed to Broken.[/]");
                 }
-                else
-                {
-                    AnsiConsole.Markup("[red]Changing Condition of Equipment to Broken Failed, Please Try Again.");
-                    Thread.Sleep(3000);
-                    ENUserInterFace.maintenancemngmnt();
-                }
-
             }
-            catch (Exception)
+            catch (ArgumentException e)
+            {
+                AnsiConsole.MarkupLine($"[red]🚫 Changing Condition Failed: {e.Message}[/]");
+            }
+            finally
             {
                 Thread.Sleep(3000);
                 ENUserInterFace.maintenancemngmnt();
             }
         }
-        public static void ShowStudentAccommodation()
+        public static void CheckRepairStatus()
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Show student accommodation[/]");
-                Report.ShowStudentAccommodation();
+                AnsiConsole.MarkupLine("[bold blue]🔍 Checking Repair Request of an Equipment[/]");
+                string propertynumber = AnsiConsole.Ask<string>("Enter Property Number of The Equipment Being Repaired: ");
+                if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.maintenancemngmnt();
+
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("yellow"))
+                    .Start("Fetching repair request status... 🔧", ctx =>
+                    {
+                        Thread.Sleep(1500);
+                        Program.db.ShowRecordsByField("RepairRequests", "PropertyNumber", propertynumber);
+                    });
+
+                AnsiConsole.MarkupLine("[green]✅ Repair status displayed successfully.[/]");
             }
             catch (Exception)
             {
+                AnsiConsole.MarkupLine("[red]🚫 Checking status of repairing equipment failed, please try again.[/]");
+            }
+            finally
+            {
+                Thread.Sleep(3000);
+                ENUserInterFace.maintenancemngmnt();
+            }
+        }
+        //dormitory
+        public static void GetDormitoryInfo()
+        {
+            try
+            {
+                AnsiConsole.MarkupLine("[bold blue]🏠 Register New Dormitory[/]");
+                string fullName = AnsiConsole.Ask<string>("Name of Dormitory: ");
+                if (ENUserInterFace.checkback(fullName))
+                    ENUserInterFace.mainMenu();
+
+                string address = AnsiConsole.Ask<string>("Address of Dormitory: ");
+                if (ENUserInterFace.checkback(address))
+                    ENUserInterFace.mainMenu();
+
+                string capacityStr;
+                int capacity;
+                while (true)
+                {
+                    capacityStr = AnsiConsole.Ask<string>("Capacity of Dormitory (must be divisible by 6): ");
+                    if (ENUserInterFace.checkback(capacityStr))
+                        ENUserInterFace.mainMenu();
+
+                    if (!int.TryParse(capacityStr, out capacity))
+                    {
+                        AnsiConsole.MarkupLine("[red]❌ Invalid number. Please enter a valid integer.[/]");
+                        Thread.Sleep(2500);
+                        continue;
+                    }
+
+                    if (capacity % 6 != 0)
+                    {
+                        AnsiConsole.MarkupLine("[red]❌ Dormitory capacity must be divisible by 6, as each room accommodates 6 students.[/]");
+                        Thread.Sleep(3000);
+                        continue;
+                    }
+                    break;
+                }
+
+                string responsible;
+                while (true)
+                {
+                    responsible = AnsiConsole.Ask<string>("Social Number of Responsible Supervisor: ");
+                    if (ENUserInterFace.checkback(responsible))
+                        ENUserInterFace.mainMenu();
+
+                    var supervisors = db.GetRecordsByField("DormitorySupervisors", "SocialNumber", responsible);
+                    if (supervisors.Count == 0)
+                    {
+                        AnsiConsole.MarkupLine("[red]❌ Supervisor not found. Please enter a valid social number.[/]");
+                        Thread.Sleep(3000);
+                        continue;
+                    }
+
+                    if (supervisors[0]["DormitoryId"].ToString() != "")
+                    {
+                        AnsiConsole.MarkupLine("[red]The entered supervisors is assigned to another dormitory ,please try another one ... [/]");
+                        Thread.Sleep(3000);
+                        continue;
+                    }
+
+                    break;
+                }
+
+                bool done = false;
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("green"))
+                    .Start("Creating dormitory...", ctx =>
+                    {
+                        Thread.Sleep(1500);
+                        done = DormitoryManager.AddDormitory(fullName, address, capacity, responsible);
+                    });
+
+                if (done)
+                {
+                    AnsiConsole.MarkupLine("[green]✅ Dormitory created successfully.[/]");
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("[red]❌ Creating dormitory failed, please try again.[/]");
+                }
+
+                Thread.Sleep(3000);
+                ENUserInterFace.dormitorymngmnt();
+            }
+            catch (Exception)
+            {
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.dormitorymngmnt();
+            }
+        }
+        public static void RemoveDormitory()
+        {
+            try
+            {
+                AnsiConsole.MarkupLine("[blue]🗑️ Remove Dormitory[/]");
+
+                while (true)
+                {
+                    string name = AnsiConsole.Ask<string>("🏢 [green]Enter Dormitory Name[/]: ");
+                    if (ENUserInterFace.checkback(name))
+                    {
+                        ENUserInterFace.dormitorymngmnt();
+                        return;
+                    }
+
+                    var data = db.GetRecordsByField("Dormitories", "Name", name);
+
+                    if (data.Count > 0)
+                    {
+                        var dormId = data[0]["Id"];
+                        AnsiConsole.MarkupLine($"[yellow]Dormitory Found:[/] Name: [aqua]{name}[/], ID: [aqua]{dormId}[/]");
+
+                        var confirmation = AnsiConsole.Prompt(
+                            new SelectionPrompt<string>()
+                                .Title("Are you sure you want to remove this dormitory?")
+                                .AddChoices(new[] { "Yes", "No", "Cancel" }));
+
+                        if (confirmation == "Yes")
+                        {
+                            var result = AnsiConsole.Status()
+                                .Start("Removing dormitory...", ctx =>
+                                {
+                                    Thread.Sleep(1000);
+                                    return DormitoryManager.RemoveDormitory(name);
+                                });
+
+                            if (result)
+                            {
+                                AnsiConsole.MarkupLine("[green]✅ Dormitory deleted successfully.[/]");
+                            }
+                            else
+                            {
+                                AnsiConsole.MarkupLine("[red]❌ Failed to delete dormitory. Please try again.[/]");
+                            }
+
+                            Thread.Sleep(2500);
+                            ENUserInterFace.dormitorymngmnt();
+                            return;
+                        }
+                        else if (confirmation == "No")
+                        {
+                            continue;
+                        }
+                        else
+                        {
+                            ENUserInterFace.dormitorymngmnt();
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine($"[red]❌ No dormitory found with name: {name}[/]");
+                        bool retry = AnsiConsole.Confirm("🔁 Try again?");
+                        if (!retry)
+                        {
+                            ENUserInterFace.dormitorymngmnt();
+                            return;
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
+                Thread.Sleep(2500);
+                ENUserInterFace.dormitorymngmnt();
+            }
+        }
+        public static void UpdateDormitoryInfo()
+        {
+            try
+            {
+                AnsiConsole.MarkupLine("[bold blue]✏️ Update Dormitory Information[/]");
+
+                string name = AnsiConsole.Ask<string>("Enter Dormitory Name: ");
+                if (ENUserInterFace.checkback(name))
+                {
+                    ENUserInterFace.dormitorymngmnt();
+                    return;
+                }
+
+                var dormitoryRecord = Program.db.GetRecordsByField("Dormitories", "Name", name);
+                if (dormitoryRecord == null || dormitoryRecord.Count == 0)
+                {
+                    AnsiConsole.MarkupLine($"[red]❌ No dormitory found with the name: {name}![/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.dormitorymngmnt();
+                    return;
+                }
+
+                var record = dormitoryRecord[0];
+                AnsiConsole.Write(new Panel($"[bold yellow]📄 Current Info for [green]{name}[/][/]\n\n" +
+                                            $"🏠 Address: [white]{record["Address"]}[/]\n" +
+                                            $"👥 Capacity: [white]{record["Capacity"]}[/]\n" +
+                                            $"🧑 Responsible (SSN): [white]{record["Responsible"]}[/]")
+                                    .BorderColor(Spectre.Console.Color.Cyan1)
+                                    .RoundedBorder()
+                                    .Padding(1, 1));
+
+                string newCapacity = AnsiConsole.Prompt(new TextPrompt<string>(
+                        "Enter new [blue]capacity[/] ([grey]leave empty to keep current[/]):")
+                        .AllowEmpty());
+
+                if (ENUserInterFace.checkback(newCapacity))
+                {
+                    ENUserInterFace.dormitorymngmnt();
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(newCapacity) && !int.TryParse(newCapacity, out int parsedCapacity))
+                {
+                    AnsiConsole.MarkupLine("[red]❌ Invalid capacity. Please enter a numeric value.[/]");
+                    Thread.Sleep(2000);
+                    UpdateDormitoryInfo();
+                    return;
+                }
+
+                string newAddress = AnsiConsole.Prompt(new TextPrompt<string>(
+                        "Enter new [blue]address[/] ([grey]leave empty to keep current[/]):")
+                        .AllowEmpty());
+
+                if (ENUserInterFace.checkback(newAddress))
+                {
+                    ENUserInterFace.dormitorymngmnt();
+                    return;
+                }
+
+                string newResponsible = AnsiConsole.Prompt(new TextPrompt<string>(
+                        "Enter new [blue]responsible's social number[/] ([grey]leave empty to keep current[/]):")
+                        .AllowEmpty());
+
+                if (ENUserInterFace.checkback(newResponsible))
+                {
+                    ENUserInterFace.dormitorymngmnt();
+                    return;
+                }
+
+                bool done = false;
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots2)
+                    .SpinnerStyle(Style.Parse("green"))
+                    .Start("Updating dormitory information...", ctx =>
+                    {
+                        Thread.Sleep(1500);
+                        done = DormitoryManager.UpdateDormitoryInfoWithCurrentData(name, newCapacity, newAddress, newResponsible);
+                    });
+
+                if (done)
+                {
+                    AnsiConsole.MarkupLine("[green]✅ Information updated successfully.[/]");
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("[red]❌ Updating failed. Please try again later.[/]");
+                }
+
+                Thread.Sleep(3000);
+                ENUserInterFace.dormitorymngmnt();
+            }
+            catch (Exception)
+            {
+                AnsiConsole.MarkupLine($"[red]⚠️ An unexpected error occurred, Returning to menu...[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.dormitorymngmnt();
+            }
+        }
+        public static void ShowAllDormitory()
+        {
+            try
+            {
+                AnsiConsole.Clear();
+                AnsiConsole.MarkupLine("[bold blue]🏨 Show All Dormitories[/]");
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("green"))
+                    .Start("Loading Dormitories from database...", ctx =>
+                    {
+
+                        Thread.Sleep(1500);
+                    });
+
+                DormitoryManager.ShowAlldormitories();
+
+                AnsiConsole.MarkupLine("\n[bold green]✅ Blocks loaded successfully.[/]");
+                Thread.Sleep(3000);
+                ReadKey();
+            }
+            catch (Exception)
+            {
+                AnsiConsole.MarkupLine($"[red]❌ An error occurred, Returning to menu...[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.dormitorymngmnt();
+            }
+        }
+        //block
+        public static void GetBlockInfo()
+        {
+            try
+            {
+                AnsiConsole.Status()
+                    .Start("Loading Dormitories...", ctx =>
+                    {
+                        Thread.Sleep(2000);
+                    });
+                AnsiConsole.Clear();
+                AnsiConsole.MarkupLine("[bold blue]:house: Dormitories (Remember the [bold yellow]ID[/])[/]");
+                db.ShowAllrecords("Dormitories", false);
+
+                AnsiConsole.MarkupLine("\n[bold green]Let's register a new block![/]");
+
+                string dormitoryId = AnsiConsole.Ask<string>("[bold]🔑 Enter Dormitory ID[/]: ");
+                if (ENUserInterFace.checkback(dormitoryId))
+                    ENUserInterFace.blockmngmnt();
+
+                var dormitory = db.GetRecordsByField("Dormitories", "Id", dormitoryId).FirstOrDefault();
+                if (dormitory == null)
+                {
+                    AnsiConsole.MarkupLine("[red]Dormitory not found. Returning to menu...[/]");
+                    Thread.Sleep(2000);
+                    ENUserInterFace.blockmngmnt();
+                    return;
+                }
+
+                int dormCapacity = int.Parse(dormitory["RemainingCapacity"].ToString());
+
+                string fullName = AnsiConsole.Ask<string>("[bold]📋 Enter Name of Block[/]: ");
+                if (ENUserInterFace.checkback(fullName))
+                    ENUserInterFace.blockmngmnt();
+
+                string floor = AnsiConsole.Ask<string>("[bold]🏙️ Enter Number of Floors[/]: ");
+                if (ENUserInterFace.checkback(floor))
+                    ENUserInterFace.blockmngmnt();
+
+                string room;
+                int totalCapacity;
+
+                while (true)
+                {
+                    room = AnsiConsole.Ask<string>($"[bold]🚪 Enter Number of Rooms[/]: (Maximum = {float.Parse(dormCapacity.ToString()) / 6}) ");
+                    if (ENUserInterFace.checkback(room))
+                        ENUserInterFace.blockmngmnt();
+
+                    totalCapacity = int.Parse(room) * 6;
+
+                    if (totalCapacity > dormCapacity)
+                    {
+                        AnsiConsole.MarkupLine("[yellow]⚠️ Block capacity exceeds dormitory capacity. Please try again.[/]");
+                        Thread.Sleep(2000);
+                        continue;
+                    }
+
+                    break;
+                }
+
+                string responsible;
+                while (true)
+                {
+                    responsible = AnsiConsole.Ask<string>(":bust_in_silhouette: [bold]Enter Social Number of Responsible[/]: ");
+                    if (ENUserInterFace.checkback(responsible))
+                        ENUserInterFace.blockmngmnt();
+
+                    if (db.GetRecordsByField("DormitoryBlockSupervisors", "SocialNumber", responsible).Count > 0)
+                        break;
+                    if(db.GetRecordsByField("DormitoryBlockSupervisors", "SocialNumber", responsible)[0]["BlockId"].ToString() != "")
+                    {
+                        AnsiConsole.MarkupLine("[red]The entered Block supervisors is assigned to another dormitory ,please try another one ... [/]");
+                        Thread.Sleep(3000);
+                        continue;
+                    }    
+                    AnsiConsole.MarkupLine("[red]❌ Responsible not found or assigned elsewhere. Please try again.[/]");
+                    Thread.Sleep(2000);
+                }
+
+                bool success = false;
+                AnsiConsole.Status()
+                    .Start("Registering new block...", ctx =>
+                    {
+                        success = BlocksManager.AddBlock(dormitoryId, fullName, floor, room, responsible, totalCapacity);
+                        Thread.Sleep(1000); 
+                    });
+
+                AnsiConsole.Clear();  
+
+                if (success)
+                {
+                    AnsiConsole.MarkupLine("[bold green]✅ Block created successfully![/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.blockmngmnt();
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("[red]❌ Failed to create block. Returning to menu...[/]");
+                    Thread.Sleep(3000);
+                    ENUserInterFace.dormitorymngmnt();
+                }
+
+            }
+            catch (Exception)
+            {
+                AnsiConsole.MarkupLine($"[red]❌ An error occurred, Returning to menu...[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.blockmngmnt();
+            }
+        }
+        public static void RemoveBlock()
+        {
+            try
+            {
+                while (true)
+                {
+                    AnsiConsole.Clear();
+                    AnsiConsole.MarkupLine("[bold blue]🗑️ Remove Block[/]");
+
+                    string name = AnsiConsole.Ask<string>("Enter Block Name: ");
+                    if (ENUserInterFace.checkback(name))
+                    {
+                        ENUserInterFace.blockmngmnt();
+                        return;
+                    }
+
+                    var data = db.GetRecordsByField("Blocks", "Name", name);
+                    if (data.Count == 0)
+                    {
+                        AnsiConsole.MarkupLine($"[red]❌ No block found with name: {name}![/]");
+                        Thread.Sleep(2500);
+                        continue;
+                    }
+
+                    var blockId = data[0]["Id"];
+                    string promptMsg = $"A block with Name: [green]{name}[/] & ID: [yellow]{blockId}[/] found.\nAre you sure to remove it? ([green]Y[/]/[red]N[/]) : ";
+                    var answ = AnsiConsole.Ask<string>(promptMsg);
+
+                    if (answ.Equals("y", StringComparison.OrdinalIgnoreCase))
+                    {
+                        bool done = false;
+                        AnsiConsole.Status()
+                            .Spinner(Spinner.Known.Dots)
+                            .SpinnerStyle(Style.Parse("green"))
+                            .Start("Removing block...", ctx =>
+                            {
+                                Thread.Sleep(1500);
+                                done = BlocksManager.RemoveBlock(name);
+                            });
+
+                        if (done)
+                        {
+                            AnsiConsole.MarkupLine("[bold green]✅ Block deleted successfully.[/]");
+                            Thread.Sleep(3000);
+                            ENUserInterFace.blockmngmnt();
+                            return;
+                        }
+                        else
+                        {
+                            AnsiConsole.MarkupLine("[red]❌ Failed to delete block. Returning to menu...[/]");
+                            Thread.Sleep(3000);
+                            ENUserInterFace.blockmngmnt();
+                            return;
+                        }
+                    }
+                    else if (answ.Equals("n", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ENUserInterFace.blockmngmnt();
+                        return;
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine("[red]⚠️ Unknown command, please try again...[/]");
+                        Thread.Sleep(2000);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                AnsiConsole.MarkupLine($"[red]⚠️ An error occurred, Returning to menu...[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.blockmngmnt();
+            }
+        }
+        public static void UpdateBlockInfo()
+        {
+            try
+            {
+                while (true)
+                {
+                    AnsiConsole.Clear();
+                    AnsiConsole.MarkupLine("[bold blue]📝 Update Block Information[/]");
+
+                    string name = AnsiConsole.Ask<string>("Enter Block Name: ");
+                    if (ENUserInterFace.checkback(name))
+                    {
+                        ENUserInterFace.blockmngmnt();
+                        return;
+                    }
+
+                    var blockRecord = Program.db.GetRecordsByField("Blocks", "Name", name);
+                    if (blockRecord == null || blockRecord.Count == 0)
+                    {
+                        AnsiConsole.MarkupLine($"[red]❌ No block found with name: {name}![/]");
+                        Thread.Sleep(3000);
+                        continue;
+                    }
+
+                    var record = blockRecord[0];
+                    AnsiConsole.Write(new Panel(
+                        $"[bold yellow]📄 Current Info for [green]{name}[/][/]\n\n" +
+                        $"🏢 Floors: [white]{record["Floor"]}[/]\n" +
+                        $"🚪 Rooms: [white]{record["Rooms"]}[/]\n" +
+                        $"🧑 Responsible (SSN): [white]{record["Responsible"]}[/]")
+                        .BorderColor(Spectre.Console.Color.Cyan1)
+                        .RoundedBorder()
+                        .Padding(1, 1));
+
+                    string newFloor = AnsiConsole.Prompt(
+                        new TextPrompt<string>("Enter new [blue]Number of floor(s)[/] (leave empty to keep current):")
+                        .AllowEmpty());
+
+                    if (ENUserInterFace.checkback(newFloor))
+                    {
+                        ENUserInterFace.blockmngmnt();
+                        return;
+                    }
+
+                    string newRoom = AnsiConsole.Prompt(
+                        new TextPrompt<string>("Enter new [blue]Number of room(s)[/] (leave empty to keep current):")
+                        .AllowEmpty());
+
+                    if (ENUserInterFace.checkback(newRoom))
+                    {
+                        ENUserInterFace.blockmngmnt();
+                        return;
+                    }
+
+                    string newResponsible = AnsiConsole.Prompt(
+                        new TextPrompt<string>("Enter new [blue]responsible's social number[/] (leave empty to keep current):")
+                        .AllowEmpty());
+
+                    if (ENUserInterFace.checkback(newResponsible))
+                    {
+                        ENUserInterFace.blockmngmnt();
+                        return;
+                    }
+
+                    bool done = false;
+                    AnsiConsole.Status()
+                        .Spinner(Spinner.Known.Dots2)
+                        .SpinnerStyle(Style.Parse("green"))
+                        .Start("Updating block information...", ctx =>
+                        {
+                            Thread.Sleep(1500);
+                            done = BlocksManager.UpdateBlockInfoWithCurrentData(name, newFloor, newRoom, newResponsible);
+                        });
+
+                    if (done)
+                    {
+                        AnsiConsole.MarkupLine("[green]✅ Information updated successfully.[/]");
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine("[red]❌ Updating failed. Please try again later.[/]");
+                    }
+
+                    Thread.Sleep(3000);
+                    ENUserInterFace.blockmngmnt();
+                    return;
+                }
+            }
+            catch (Exception)
+            {
+                AnsiConsole.MarkupLine($"[red]⚠️ An error occurred, Returning to menu...[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.blockmngmnt();
+            }
+        }
+        public static void ShowAllBlocks()
+        {
+            try
+            {
+                Clear();
+                AnsiConsole.MarkupLine("[bold blue]🏢 Show All Blocks[/]");
+
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("green"))
+                    .Start("Loading blocks from database...", ctx =>
+                    {
+ 
+                        Thread.Sleep(1500);
+                    });
+
+                BlocksManager.ShowAllblocks();
+
+                AnsiConsole.MarkupLine("\n[bold green]✅ Blocks loaded successfully.[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.blockmngmnt();
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[red]⚠️ An error occurred: {ex.Message}[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.blockmngmnt();
+            }
+        }
+        //reports
+        public static void showAllEquipmentAssignedToEachRoom()
+        {
+            try
+            {
+                AnsiConsole.MarkupLine("[underline blue]🔍 Show all equipment assigned to each room[/]\n");
+
+                List<Dictionary<string, object>> allDorms = Program.db.GetAllRecords("Dormitories");
+                if (allDorms.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[red]⚠️ No dormitories found.[/]");
+                    return;
+                }
+
+                var table = new Table();
+                table.Border(TableBorder.Rounded);
+                table.AddColumn("Dormitory");
+                table.AddColumn("Block");
+                table.AddColumn("Room");
+                table.AddColumn("Equipment Type");
+                table.AddColumn("Part Number");
+
+                bool hasEquipment = false;
+
+                foreach (var dorm in allDorms)
+                {
+                    var dormId = Convert.ToInt32(dorm["Id"]);
+                    var dormName = dorm["Name"].ToString();
+
+                    var dormBlocks = Program.db.GetRecordsByField("Blocks", "DormitoryId", dormId);
+                    foreach (var block in dormBlocks)
+                    {
+                        var blockId = Convert.ToInt32(block["Id"]);
+                        var blockName = block["Name"].ToString();
+
+                        var blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", blockId);
+                        foreach (var room in blockRooms)
+                        {
+                            var roomId = Convert.ToInt32(room["Id"]);
+                            var roomName = room["Id"].ToString();
+
+                            var equipmentList = Program.db.GetRecordsByField("Equipment", "RoomId", roomId);
+                            if (equipmentList.Count == 0)
+                            {
+                                table.AddRow(dormName, blockName, roomName, "[grey]No equipment[/]", "-");
+                                continue;
+                            }
+
+                            hasEquipment = true;
+
+                            foreach (var equip in equipmentList)
+                            {
+                                table.AddRow(
+                                    dormName,
+                                    blockName,
+                                    roomName,
+                                    equip["Type"].ToString(),
+                                    equip["PartNumber"].ToString()
+                                );
+                            }
+                        }
+                    }
+                }
+
+                AnsiConsole.Write(table);
+
+                if (!hasEquipment)
+                {
+                    AnsiConsole.MarkupLine("\n[bold yellow]⚠️ No equipment found in any room.[/]");
+                }
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine("[bold red]❌ An error occurred while showing equipment. Returning to reporting menu...[/]");
+                AnsiConsole.MarkupLine($"[grey]{ex.Message}[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.reporting();
+            }
+        }
+        public static void showAllEquipmentAssignedToEachStudent()
+        {
+            try
+            {
+                AnsiConsole.MarkupLine("[blue]Showing all equipment assigned to each student...[/]");
+
+                var allDorms = db.GetAllRecords("Dormitories");
+                if (allDorms.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[red]No records found in Dormitories table[/]");
+                    return;
+                }
+
+                var table = new Table()
+                    .Centered()
+                    .Border(TableBorder.Rounded)
+                    .AddColumn("[bold blue]Dormitory[/]")
+                    .AddColumn("[bold yellow]Block[/]")
+                    .AddColumn("[bold green]Room[/]")
+                    .AddColumn("[bold cyan]Student Name[/]")
+                    .AddColumn("[bold magenta]Equipment Type[/]")
+                    .AddColumn("[bold gray]Part Number[/]");
+
+                bool foundAny = false;
+
+                foreach (var dorm in allDorms)
+                {
+                    var dormBlocks = db.GetRecordsByField("Blocks", "DormitoryId", Convert.ToInt32(dorm["Id"]));
+                    foreach (var block in dormBlocks)
+                    {
+                        var blockRooms = db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
+                        foreach (var room in blockRooms)
+                        {
+                            var students = db.GetRecordsByField("Students", "RoomId", Convert.ToInt32(room["Id"]));
+                            foreach (var student in students)
+                            {
+                                var equipment = db.GetRecordsByField("Equipment", "OwnerId", Convert.ToInt32(student["Id"]));
+                                if (equipment.Count == 0)
+                                    continue;
+
+                                foreach (var equip in equipment)
+                                {
+                                    table.AddRow(
+                                        dorm["Name"].ToString(),
+                                        block["Name"].ToString(),
+                                        room["Id"].ToString(),
+                                        student["FullName"].ToString(),
+                                        equip["Type"].ToString(),
+                                        equip["PartNumber"].ToString()
+                                    );
+                                    foundAny = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (foundAny)
+                    AnsiConsole.Write(table);
+                else
+                    AnsiConsole.MarkupLine("[yellow]No equipment assigned to any student.[/]");
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[red]An error occurred: {ex.Message}[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.reporting();
+            }
+        }
+        public static void ShowAllDefectiveAndInrepairEquipment()
+        {
+            AnsiConsole.MarkupLine("[blue]🔧 Checking defective and repairing equipment...[/]");
+
+            var broken = Program.db.GetRecordsByField("Equipment", "Condition", "Broken");
+            var repairing = Program.db.GetRecordsByField("Equipment", "Condition", "Reparing");
+
+            if (broken.Count == 0 && repairing.Count == 0)
+            {
+                AnsiConsole.MarkupLine("[green]✅ No defective or repairing equipment found.[/]");
+                return;
+            }
+
+            var table = new Table()
+                .Border(TableBorder.Rounded)
+                .Title("[bold underline red]Equipment Status[/]")
+                .AddColumn("[bold]🔩 Type[/]")
+                .AddColumn("[bold]🆔 Part Number[/]")
+                .AddColumn("[bold]📦 Property Number[/]")
+                .AddColumn("[bold]⚙️ Condition[/]");
+
+            foreach (var item in broken)
+            {
+                table.AddRow(
+                    $"[red]{item["Type"]}[/]",
+                    item["PartNumber"].ToString(),
+                    item["PropertyNumber"].ToString(),
+                    "[red]❌ Broken[/]"
+                );
+            }
+
+            foreach (var item in repairing)
+            {
+                table.AddRow(
+                    $"[yellow]{item["Type"]}[/]",
+                    item["PartNumber"].ToString(),
+                    item["PropertyNumber"].ToString(),
+                    "[yellow]🛠️ Repairing[/]"
+                );
+            }
+
+            AnsiConsole.Write(table);
+        }
+        public static void showStudentAccommodation()
+        {
+            try
+            {
+                AnsiConsole.MarkupLine("[bold blue]📋 Showing student accommodations[/]");
+
+                List<Dictionary<string, object>> allDorms = db.GetAllRecords("Dormitories");
+                if (allDorms.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[yellow]⚠️ No dormitories found.[/]");
+                    return;
+                }
+
+                Table table = new Table();
+                table.Border = TableBorder.Rounded;
+                table.AddColumn("[bold]Student Name[/]");
+                table.AddColumn("[bold]Student ID[/]");
+                table.AddColumn("[bold]Room[/]");
+                table.AddColumn("[bold]Block[/]");
+                table.AddColumn("[bold]Dormitory[/]");
+
+                foreach (var dorm in allDorms)
+                {
+                    string dormName = dorm["Name"].ToString();
+                    int dormId = Convert.ToInt32(dorm["Id"]);
+                    var dormBlocks = db.GetRecordsByField("Blocks", "DormitoryId", dormId);
+
+                    if (dormBlocks.Count == 0)
+                        continue;
+
+                    foreach (var block in dormBlocks)
+                    {
+                        string blockName = block["Name"].ToString();
+                        int blockId = Convert.ToInt32(block["Id"]);
+                        var blockRooms = Program.db.GetRecordsByField("Rooms", "BlockId", blockId);
+
+                        if (blockRooms.Count == 0)
+                            continue;
+
+                        foreach (var room in blockRooms)
+                        {
+                            int roomId = Convert.ToInt32(room["Id"]);
+                            var roomStudents = Program.db.GetRecordsByField("Students", "RoomId", roomId);
+
+                            if (roomStudents.Count == 0)
+                                continue;
+
+                            foreach (var student in roomStudents)
+                            {
+                                string studentName = student["FullName"].ToString();
+                                string studentId = student["StudentID"].ToString();
+
+                                table.AddRow(
+                                    $"[green]{studentName}[/]",
+                                    $"[bold]{studentId}[/]",
+                                    $"[cyan]{roomId}[/]",
+                                    $"[cyan]{blockName}[/]",
+                                    $"[cyan]{dormName}[/]"
+                                );
+                            }
+                        }
+                    }
+                }
+
+                if (table.Rows.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[yellow]⚠️ No student accommodations found.[/]");
+                }
+                else
+                {
+                    AnsiConsole.Write(table);
+                }
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[red]❌ An error occurred: {ex.Message}[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.reporting();
             }
@@ -3833,24 +5603,110 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Show full and empty room[/]");
-                Report.ShowFullAndEmptyRoom();
+                AnsiConsole.MarkupLine("[blue]🔍 Checking room status...[/]");
+
+                List<Dictionary<string, object>> allRooms = Program.db.GetAllRecords("Rooms");
+                if (allRooms.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[red]❌ No rooms found in the database.[/]");
+                    return;
+                }
+
+                var table = new Table()
+                    .Border(TableBorder.Rounded)
+                    .Title("[bold underline green]Room Occupancy Status[/]")
+                    .AddColumn("[bold]🏠 Room Id[/]")
+                    .AddColumn("[bold]🏢 Block ID[/]")
+                    .AddColumn("[bold]👥 Capacity[/]")
+                    .AddColumn("[bold]🧍‍ Occupied[/]")
+                    .AddColumn("[bold]📊 Status[/]");
+
+                foreach (var room in allRooms)
+                {
+                    int roomId = Convert.ToInt32(room["Id"]);
+                    int capacity = Convert.ToInt32(room["RemainingCapacity"]);
+                    var students = Program.db.GetRecordsByField("Students", "RoomId", roomId);
+                    int count = students.Count;
+
+                    string status = count >= capacity
+                        ? "[green]✅ Full[/]"
+                        : "[yellow]🟡 Empty[/]";
+
+                    table.AddRow(
+                        $"[aqua]{roomId}[/]",
+                        room["BlockId"].ToString(),
+                        capacity.ToString(),
+                        count.ToString(),
+                        status
+                    );
+                }
+
+                AnsiConsole.Write(table);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                WriteLine(ex.ToString());
+                AnsiConsole.MarkupLine("[red]⚠️ An error occurred while loading room data.[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.reporting();
             }
         }
-        public static void ShowRemainingCapacity()
+        public static void showRemainingCapacity()
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]show remaining capacity[/]");
-                Report.showRemainingCapacity();
+                AnsiConsole.MarkupLine("[bold blue]📊 Showing remaining capacity[/]");
+
+                List<Dictionary<string, object>> allDormitory = Program.db.GetAllRecords("Dormitories");
+                if (allDormitory.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[red]❌ No records found in table Dormitories[/]");
+                }
+                else
+                {
+                    var dormTable = new Table().Centered();
+                    dormTable.Border(TableBorder.Rounded);
+                    dormTable.AddColumn("[bold yellow]🏢 Dormitory[/]");
+                    dormTable.AddColumn("[bold green]📶 Remaining Capacity[/]");
+
+                    foreach (Dictionary<string, object> dormitory in allDormitory)
+                    {
+                        dormTable.AddRow(dormitory["Name"].ToString(), dormitory["RemainingCapacity"].ToString());
+                    }
+
+                    AnsiConsole.Write(dormTable);
+                }
+
+                List<Dictionary<string, object>> allBlocks = Program.db.GetAllRecords("Blocks");
+                if (allBlocks.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[red]❌ No records found in table Blocks[/]");
+                    return;
+                }
+
+                var blockTable = new Table().Centered();
+                blockTable.Border(TableBorder.Rounded);
+                blockTable.AddColumn("[bold yellow]🏗 Block[/]");
+                blockTable.AddColumn("[bold green]📶 Remaining Capacity[/]");
+
+                foreach (Dictionary<string, object> block in allBlocks)
+                {
+                    int totalCapacity = Convert.ToInt32(block["NumberOfRooms"]) * 6;
+                    List<Dictionary<string, object>> Rooms = db.GetRecordsByField("Rooms", "BlockId", Convert.ToInt32(block["Id"]));
+                    foreach (Dictionary<string, object> room in Rooms)
+                    {
+                        int filled = 6 - Convert.ToInt32(room["RemainingCapacity"]);
+                        totalCapacity -= filled;
+                    }
+
+                    blockTable.AddRow(block["Name"].ToString(), totalCapacity.ToString());
+                }
+
+                AnsiConsole.Write(blockTable);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                AnsiConsole.MarkupLine($"[red]❌ An error occurred: {ex.Message}[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.reporting();
             }
@@ -3859,8 +5715,8 @@ namespace Dormitory
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Show all equipment[/]");
-                Report.ShowAllEquipment();
+                AnsiConsole.MarkupLine("[blue]📋Show all equipment[/]");
+                db.ShowAllrecords("Equipment");
             }
             catch (Exception)
             {
@@ -3868,12 +5724,57 @@ namespace Dormitory
                 ENUserInterFace.reporting();
             }
         }
-        public static void ShowAllEquipmentAssignedToEachRoom()
+        public static void showAllRepairRequests()
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Show all equipment assigned to each room[/]");
-                Report.ShowAllEquipmentAssignedToEachRoom();
+                AnsiConsole.MarkupLine("[bold blue]🔧 Show all repair requests[/]");
+
+                List<Dictionary<string, object>> allRepairRequests = Program.db.GetAllRecords("RepairRequests");
+                if (allRepairRequests.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[red]⚠️ No records found in table RepairRequests[/]");
+                    return;
+                }
+
+                var table = new Table();
+                table.Border(TableBorder.Rounded);
+                table.AddColumn("[bold yellow]🆔 Request ID[/]");
+                table.AddColumn("[bold cyan]🛠️ Type[/]");
+                table.AddColumn("[bold magenta]📇 Property Number[/]");
+                table.AddColumn("[bold green]🚪 Room[/]");
+                table.AddColumn("[bold green]🏢 Block[/]");
+                table.AddColumn("[bold blue]👨‍🎓 Student Name[/]");
+                table.AddColumn("[bold blue]🎓 Student ID[/]");
+
+                foreach (var request in allRepairRequests)
+                {
+                    var equipment = db.GetRecordsByField("Equipment", "PropertyNumber", Convert.ToInt32(request["PropertyNumber"]))[0];
+                    var room = db.GetRecordsByField("Rooms", "Id", Convert.ToInt32(equipment["RoomId"]))[0];
+                    var block = db.GetRecordsByField("Blocks", "Id", Convert.ToInt32(room["BlockId"]))[0];
+
+                    string studentName = "—";
+                    string studentID = "—";
+
+                    if (equipment["OwnerId"] != DBNull.Value)
+                    {
+                        var student = db.GetRecordsByField("Students", "Id", Convert.ToInt32(equipment["OwnerId"]))[0];
+                        studentName = student["FullName"].ToString();
+                        studentID = student["StudentID"].ToString();
+                    }
+
+                    table.AddRow(
+                        $"[yellow]{request["Id"]}[/]",
+                        $"[cyan]{equipment["Type"]}[/]",
+                        $"[magenta]{request["PropertyNumber"]}[/]",
+                        $"[green]{room["RoomNumber"]}[/]",
+                        $"[green]{block["Name"]}[/]",
+                        $"[blue]{studentName}[/]",
+                        $"[blue]{studentID}[/]"
+                    );
+                }
+
+                AnsiConsole.Write(table);
             }
             catch (Exception)
             {
@@ -3881,42 +5782,33 @@ namespace Dormitory
                 ENUserInterFace.reporting();
             }
         }
-        public static void ShowAllEquipmentAssignedToEachStudent()
+        public static void showHistoryOfAccommodation()
         {
             try
             {
-                AnsiConsole.MarkupLine("[blue]Show all equipment assigned to each student[/]");
-                Report.ShowAllEquipmentAssignedToEachStudent();
+                Clear();
+                AnsiConsole.MarkupLine("[bold blue]📋 Show Students accommdation history[/]");
+
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("green"))
+                    .Start("Loading inforamtions from database...", ctx =>
+                    {
+
+                        Thread.Sleep(1500);
+                    });
+
+                db.ShowAllrecords("StudentAccommodationHistory");
+
+                AnsiConsole.MarkupLine("\n[bold green]✅ History loaded successfully.[/]");
+                Thread.Sleep(3000);
+                ENUserInterFace.SpecializedReports();
             }
             catch (Exception)
             {
+                AnsiConsole.MarkupLine($"[red]⚠️ An error occurred. Returning to menu... [/]");
                 Thread.Sleep(3000);
-                ENUserInterFace.reporting();
-            }
-        }
-        public static void ShowAllDefectiveAndInrepairEquipment()
-        {
-            try
-            {
-                Report.ShowAllDefectiveAndInrepairEquipment();
-            }
-            catch (Exception)
-            {
-                Thread.Sleep(3000);
-                ENUserInterFace.reporting();
-            }
-        }
-        public static void ShowAllRepairRequests()
-        {
-            try
-            {
-                AnsiConsole.MarkupLine("[blue]Show all repair requests[/]");
-                Report.ShowAllRepairRequests();
-            }
-            catch (Exception)
-            {
-                Thread.Sleep(3000);
-                ENUserInterFace.reporting();
+                ENUserInterFace.SpecializedReports();
             }
         }
 
@@ -3938,10 +5830,11 @@ namespace Dormitory
         //}
         static void Main()
         {
+            OutputEncoding = Encoding.UTF8;
             db = new DatabaseManager();
             db.InitializeDatabase();
             //resetdatabase();
-            ENUserInterFace.Login();
+            ENUserInterFace.Run();
         }
     }
 }
