@@ -344,13 +344,13 @@ namespace Dormitory
             }
 
             AnsiConsole.Write(table);
-            AnsiConsole.MarkupLine("[yellow]press Enter to return to main menu[/]");
+            AnsiConsole.MarkupLine("[yellow]press Enter to continue[/]");
             ConsoleKeyInfo keyInfo;
             do
             {
                 keyInfo = ReadKey(intercept: true);
             } while (keyInfo.Key != ConsoleKey.Enter);
-            ENUserInterFace.mainMenu();
+            
         }
         public void ShowAllrecords(string tableName, bool check = true)
         {
@@ -1113,12 +1113,12 @@ namespace Dormitory
         public string _type;
         public string _partNumber;
         public string _propertyNumber;
-        public Condition _condition;
+        public string _condition;
         public int _RoomId;
         public int _BlockId;
         public int _DormId;
         public Equipment() { }
-        public Equipment(string type, Condition condition, int roomid, int blockid, int dormid)
+        public Equipment(string type, string condition, int roomid, int blockid, int dormid)
         {
             _type = type;
             _condition = condition;
@@ -1129,7 +1129,7 @@ namespace Dormitory
             this.propertyNumber = "";
         }
 
-        public Equipment(string type, Condition condition, int blockid, int dormid)
+        public Equipment(string type, string condition, int blockid, int dormid)
         {
             _type = type;
             _condition = condition;
@@ -2821,7 +2821,7 @@ namespace Dormitory
                         searches();
                         break;
                     case var s when s.Contains("Show complete"):
-                        Program.showStudentwithdata();
+                        Program.ShowStudentWithData();
                         break;
                     case var s when s.Contains("Register student in dormitory"):
                         Program.GetStudentPlace();
@@ -3623,67 +3623,75 @@ namespace Dormitory
                 ENUserInterFace.studentMngmnt();
             }
         }
-        public static void showStudentwithdata()
+        public static void ShowStudentWithData()
         {
             try
             {
                 AnsiConsole.MarkupLine("[bold blue]👤 Show Student Information[/]");
-                string socialnumber = AnsiConsole.Ask<string>("Social Number: ");
+                string socialNumber = AnsiConsole.Ask<string>("Social Number: ");
 
-                if (ENUserInterFace.checkback(socialnumber))
+                if (ENUserInterFace.checkback(socialNumber))
                 {
                     ENUserInterFace.studentMngmnt();
                     return;
                 }
-                var student = db.GetRecordsByField("Students", "SocialNumber", socialnumber);
+
+                List<Dictionary<string, object>> student = null;
                 bool exists = false;
+
                 AnsiConsole.Status()
                     .Spinner(Spinner.Known.Dots)
                     .SpinnerStyle(Style.Parse("yellow"))
-                    .Start("Searching for student...", ctx =>
+                    .Start("🔍 Searching for student...", ctx =>
                     {
-                        Thread.Sleep(1500);
+                        Thread.Sleep(1000);
+                        student = db.GetRecordsByField("Students", "SocialNumber", socialNumber);
                         exists = student.Any();
                     });
 
-                if (exists)
+                if (!exists || student == null)
                 {
-                    db.ShowRecordsByField("Students", "SocialNumber", socialnumber);
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine($"[red]⚠️ No student found with Social Number: {socialnumber}[/]");
-                    Thread.Sleep(3000);
-                    showStudentwithdata();
+                    AnsiConsole.MarkupLine($"[red]⚠️ No student found with Social Number: {socialNumber}[/]");
+                    Thread.Sleep(2000);
+                    ShowStudentWithData();
                     return;
                 }
-                bool exists1 = false;
+
+                var studentRecord = student.First();
+                int studentId = int.Parse(studentRecord["Id"].ToString());
+
+                AnsiConsole.MarkupLine("\n[green]✅ Student found:[/]");
+                db.ShowRecordsByField("Students", "SocialNumber", socialNumber);
+
+                bool equipmentExists = false;
+
                 AnsiConsole.Status()
                     .Spinner(Spinner.Known.Dots)
                     .SpinnerStyle(Style.Parse("yellow"))
-                    .Start("Searching for student equipment ...", ctx =>
+                    .Start("🔍 Searching for student's equipment...", ctx =>
                     {
-                        Thread.Sleep(1500);
-                        exists1 = db.GetRecordsByField("Equipment", "OwnerId", int.Parse(student[0]["Id"].ToString())).Any();
+                        Thread.Sleep(1000);
+                        equipmentExists = db.GetRecordsByField("Equipment", "OwnerId", studentId).Any();
                     });
 
-                if(exists1)
+                if (equipmentExists)
                 {
-                    db.ShowRelatedRecords("Eqiupmen", "OwnerId", int.Parse(student[0]["Id"].ToString()));
+                    AnsiConsole.MarkupLine("\n[green]🎒 Equipment assigned to student:[/]");
+                    db.ShowRelatedRecords("Equipment", "OwnerId", studentId);
                 }
                 else
                 {
-                    AnsiConsole.MarkupLine($"[red]⚠️ No student Equipment found with Social Number: {socialnumber}[/]");
-                    Thread.Sleep(3000);
+                    AnsiConsole.MarkupLine($"[red]⚠️ No equipment found for student with Social Number: {socialNumber}[/]");
                 }
-                AnsiConsole.MarkupLine("[blue]Press ENTER to return to the Student Management menu...[/]");
-                ReadLine();
+
+                AnsiConsole.MarkupLine("\n[blue]Press ENTER to return to the Student Management menu...[/]");
+                Console.ReadLine();
                 ENUserInterFace.studentMngmnt();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                AnsiConsole.MarkupLine("[red]⚠️ An error occurred. Returning to menu...[/]");
-                Thread.Sleep(3000);
+                AnsiConsole.MarkupLine($"[red]⚠️ An error occurred: {ex.Message}[/]");
+                Thread.Sleep(2000);
                 ENUserInterFace.studentMngmnt();
             }
         }
@@ -4398,9 +4406,9 @@ namespace Dormitory
                     return;
                 }
 
-                Condition cond = Condition.Intact;
-                if (condition.Contains("Broken")) cond = Condition.Broken;
-                else if (condition.Contains("Repairing")) cond = Condition.Reparing;
+                string cond = Condition.Intact.ToString();
+                if (condition.Contains("Broken")) cond = Condition.Broken.ToString();
+                else if (condition.Contains("Repairing")) cond = Condition.Reparing.ToString();
 
                 string cleanedType = type.Substring(type.IndexOf(' ') + 1);
 
@@ -5367,7 +5375,11 @@ namespace Dormitory
                         foreach (var room in blockRooms)
                         {
                             var roomId = Convert.ToInt32(room["Id"]);
-                            var roomName = room["Id"].ToString();
+                            var roomName = room["Id" +
+                                "" +
+                                "" +
+                                "" +
+                                ""].ToString();
 
                             var equipmentList = Program.db.GetRecordsByField("Equipment", "RoomId", roomId);
                             if (equipmentList.Count == 0)
