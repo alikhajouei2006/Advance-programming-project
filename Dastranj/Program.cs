@@ -1462,7 +1462,20 @@ namespace Dormitory
 
             Program.db.UpdateRecord("Equipment", UpdatedCondition, "PropertyNumber", propertyNumber);
         }
+	public static void changeRepairStatus(string propertyNumber, RepairStatus status) {
+		checkEquipmentExistence(propertyNumber);
 
+		Dictionary<string, object> repairRequest = Program.db.GetRecordsByField("RepairRequests", "PropertyNumber", propertyNumber)[0];
+		if (repairRequest["Status"].ToString().ToLower() == status.ToString.ToLower()) {
+			throw new ArgumentException($"Repair Status Has Already Been Set to Done.");
+		}
+
+		Dicionary<string, object> UpdatedStatus = new Dictionary<string, object> {
+			{"Status", status.ToString()}
+		};
+
+		Program.db.UpdateRecord("RepairRequests", UpdatedStatus, "PropertyNumber", propertyNumber);
+	}
         public static Condition checkCondition(string propertyNumber)
         {
             Equipment equipment = Equipment.FromDictionary(Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0]);
@@ -2856,7 +2869,8 @@ namespace Dormitory
             "1. 🛠️ Request Repair of Equipment",
             "2. 🔍 Check Status of Equipment Being Repaired",
             "3. ⚠️ Set Equipment Condition as Broken",
-            "4. 🔙 Back to Previous Menu"
+	    "4. Set Repair Status as Done",
+            "5. 🔙 Back to Previous Menu"
         };
 
                 var choice = AnsiConsole.Prompt(
@@ -2876,6 +2890,9 @@ namespace Dormitory
                         break;
                     case var s when s.Contains("Set Equipment"):
                         Program.SetEquipmentConditionAsBroken();
+                        break;
+		    case var s when s.Contains("Set Repair"):
+                        Program.SetRepairStatusAsDone();
                         break;
                     case var s when s.Contains("Back"):
                         equipmentmngmnt();
@@ -4703,6 +4720,37 @@ namespace Dormitory
                 ENUserInterFace.maintenancemngmnt();
             }
         }
+	public static void SetRepairStatusAsDone() {
+                AnsiConsole.MarkupLine("[bold blue]🔧 Changing Status of Repairing to Broken[/]");
+                string propertynumber = AnsiConsole.Ask<string>("Enter Property Number of Repaired Equipment: ");
+                if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.maintenancemngmnt();
+
+                bool done = false;
+                AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .SpinnerStyle(Style.Parse("yellow"))
+                    .Start("Updating repair status... 🛠️", ctx =>
+                    {
+                        Thread.Sleep(1500);
+                        EquipmentManager.changeRepairStatus(propertynumber, RequestStatus.Done);
+                        done = true;
+                    });
+
+                if (done)
+                {
+                    AnsiConsole.MarkupLine("[green]✅ Repair Request Successfully Set to Done.[/]");
+                }
+            }
+            catch (ArgumentException e)
+            {
+                AnsiConsole.MarkupLine($"[red]🚫 Changing Status Failed: {e.Message}[/]");
+            }
+            finally
+            {
+                Thread.Sleep(3000);
+                ENUserInterFace.maintenancemngmnt();
+            }		
+	}
         public static void CheckRepairStatus()
         {
             try
