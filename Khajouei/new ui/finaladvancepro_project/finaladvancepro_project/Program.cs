@@ -2506,10 +2506,11 @@ namespace Dormitory
                 var choices = new[]
                 {
             "1. ➕ Add new Block",
-            "2. ❌ Remove Block",
-            "3. ✏️ Edit Block information",
-            "4. 📋 Show All Blocks",
-            "5. 🔙 Back to main menu"
+            "2. 🚹 Set supervisor",
+            "3. ❌ Remove Block",
+            "4. ✏️ Edit Block information",
+            "5. 📋 Show All Blocks",
+            "6. 🔙 Back to main menu"
         };
 
                 var choice = AnsiConsole.Prompt(
@@ -2523,6 +2524,9 @@ namespace Dormitory
                 {
                     case var s when s.Contains("Add"):
                         Program.GetBlockInfo();
+                        break;
+                    case var s when s.Contains("Set"):
+                        Program.setblocksupervisor();
                         break;
                     case var s when s.Contains("Remove"):
                         Program.RemoveBlock();
@@ -4169,7 +4173,7 @@ namespace Dormitory
                         student["PhoneNumber"].ToString() != PhoneNumber ||
                         student["Address"].ToString() != Address)
                     {
-                        AnsiConsole.MarkupLine($"[blod red]⚠️ student with identifier : {SocialNumber} exists\n but one of the details - Name,Phone Number or Address - has been entered incorectly.\n[/]" +
+                        AnsiConsole.MarkupLine($"[bold red]⚠️ student with identifier : {SocialNumber} exists\n but one of the details - Name,Phone Number or Address - has been entered incorectly.\n[/]" +
                             $"[bold yellow] please enter above information correctly.[/]");
                         Thread.Sleep(4000);
                         continue;
@@ -4236,7 +4240,7 @@ namespace Dormitory
                     {
                         string name = data[0]["FullName"].ToString();
                         ;
-                        AnsiConsole.MarkupLine($"[yellow]Dormitory Found:[/] Name: [aqua]{name}[/], identifier : [aqua]{socialNumber}[/]");
+                        AnsiConsole.MarkupLine($"[yellow]Block supervisor Found:[/] Name: [aqua]{name}[/], identifier : [aqua]{socialNumber}[/]");
 
                         var confirmation = AnsiConsole.Prompt(
                             new SelectionPrompt<string>()
@@ -5238,7 +5242,7 @@ namespace Dormitory
                         Thread.Sleep(3000);
                         setblocksupervisor();
                     }
-                    if (student["BlcokId"].ToString() != block[0]["Id"].ToString())
+                    if (student["BlockId"].ToString() != block[0]["Id"].ToString())
                     {
                         AnsiConsole.MarkupLine("[bold red]⚠️ the selected block must be the same as the student's current block.[/]");
                         Thread.Sleep(3000);
@@ -5277,8 +5281,9 @@ namespace Dormitory
                 }
 
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                WriteLine(ex.ToString());
                 AnsiConsole.MarkupLine($"[red]❌ An error occured, Returning to menu...[/]");
                 Thread.Sleep(3000);
                 ENUserInterFace.blockmngmnt();
