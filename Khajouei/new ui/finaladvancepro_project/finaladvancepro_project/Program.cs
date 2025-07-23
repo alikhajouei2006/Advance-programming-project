@@ -183,6 +183,7 @@ namespace Dormitory
                 NumberOfRooms INTEGER,
                 TotalCapacity INTEGER NOT NULL,
                 RemainingCapacity INTEGER NOT NULL,
+		        ItemCount INTEGER DEFAULT 0,
                 FOREIGN KEY (DormitoryId) REFERENCES Dormitories(Id) ON DELETE SET NULL
             );";
 
@@ -256,7 +257,6 @@ namespace Dormitory
                 UserName TEXT UNIQUE NOT NULL,
                 Password TEXT NOT NULL
             );";
-
 
             string itemSql = @"
             CREATE TABLE IF NOT EXISTS PersonalItems (
@@ -971,7 +971,7 @@ namespace Dormitory
         public int _NO_rooms { get; set; }
         public int _totalCapacity { get; set; }
         public int _remainingCapacity { get; set; }
-        public Block(string dormitory, string name, int floor, int room, int capacity, string responsible="")
+        public Block(string dormitory, string name, int floor, int room, int capacity, string responsible = "")
         {
             _dormitoryId = dormitory;
             _name = name;
@@ -1009,7 +1009,7 @@ namespace Dormitory
             {
                 Block block = new Block(dormiId, name, int.Parse(floor), int.Parse(room), capacity);
                 Program.db.InsertRecord("Blocks", ToDictionary(block));
-               
+
                 string blockid = Program.db.GetRecordsByField("Blocks", "Name", name)[0]["Id"].ToString();
                 int totalFloors = int.Parse(floor);
                 int totalRooms = int.Parse(room);
@@ -1036,14 +1036,14 @@ namespace Dormitory
                 Program.db.UpdateRecord("Blocks", new Dictionary<string, object>
                 {
                     {"Responsible" ,socialnumber}
-                }, "Name",blockname);
+                }, "Name", blockname);
                 Program.db.UpdateRecord("DormitoryBlockSupervisors", new Dictionary<string, object>
                 {
                     {"BlockId",block["Id"].ToString() }
                 }, "SocialNumber", socialnumber);
                 return true;
             }
-            catch(Exception)
+            catch (Exception)
             {
                 return false;
             }
@@ -1122,8 +1122,7 @@ namespace Dormitory
     }
     class Equipment
     {
-        public static int _ItemCounter = 0;
-
+        public int _ItemCount;
         public string _type;
         public string _partNumber;
         public string _propertyNumber;
@@ -1132,23 +1131,25 @@ namespace Dormitory
         public int _BlockId;
         public int _DormId;
         public Equipment() { }
-        public Equipment(string type, string condition, int roomid, int blockid, int dormid)
+        public Equipment(string type, string condition, int roomid, int blockid, int dormid, int itemcount)
         {
             _type = type;
             _condition = condition;
             _RoomId = roomid;
             _BlockId = blockid;
             _DormId = dormid;
+            _ItemCount = itemcount;
             this.partNumber = "";
             this.propertyNumber = "";
         }
-        public Equipment(string type, string condition, int blockid, int dormid)
+        public Equipment(string type, string condition, int blockid, int dormid, int itemcount)
         {
             _type = type;
             _condition = condition;
             _BlockId = blockid;
             _DormId = dormid;
             _RoomId = -1;
+            _ItemCount = itemcount;
             partNumber = "";
             propertyNumber = "";
         }
@@ -1169,9 +1170,8 @@ namespace Dormitory
             get => _propertyNumber;
             set
             {
-                string counter = _ItemCounter.ToString();
+                string counter = _ItemCount.ToString();
                 _propertyNumber = $"{_DormId}{_BlockId}{_partNumber}{counter.PadLeft(3, '0')}";
-                _ItemCounter++;
             }
         }
         public virtual Dictionary<string, object> ToDictionary()
@@ -1461,61 +1461,20 @@ namespace Dormitory
 
             Program.db.UpdateRecord("Equipment", UpdatedCondition, "PropertyNumber", propertyNumber);
         }
-        public static void changeRepairStatus(string propertyNumber, RequestStatus status) 
+        public static void changeRepairStatus(string propertyNumber, RequestStatus status)
         {
-		    checkEquipmentExistence(propertyNumber);
+            checkEquipmentExistence(propertyNumber);
 
-		    Dictionary<string, object> repairRequest = Program.db.GetRecordsByField("RepairRequests", "PropertyNumber", propertyNumber)[0];
-		    if (repairRequest["Status"].ToString().ToLower() == status.ToString().ToLower()) 
+            Dictionary<string, object> repairRequest = Program.db.GetRecordsByField("RepairRequests", "PropertyNumber", propertyNumber)[0];
+            if (repairRequest["Status"].ToString().ToLower() == status.ToString().ToLower())
             {
-			    throw new ArgumentException($"Repair Status Has Already Been Set to Done.");
-		    }
+                throw new ArgumentException($"Repair Status Has Already Been Set to Done.");
+            }
 
-		    Dictionary<string, object> UpdatedStatus = new Dictionary<string, object> {
-			    {"Status", status.ToString()}
-		    };
-            Program.db.UpdateRecord("Equipment", new Dictionary<string, object>
-            {
-                {"Status","Intact"}
-            },"PropertyNumber",propertyNumber);
-		    Program.db.UpdateRecord("RepairRequests", UpdatedStatus, "PropertyNumber", propertyNumber);
-	    }
-        public static string checkCondition(string propertyNumber)
-        {
-            Equipment equipment = Equipment.FromDictionary(Program.db.GetRecordsByField("Equipment", "PropertyNumber", propertyNumber)[0]);
-            return equipment._condition;
-        }
-        public static void equipmentAssignedToRoom(int RoomId)
-        {
-            List<Dictionary<string, object>> roomEquipment = Program.db.GetRecordsByField("Equipment", "RoomId", RoomId);
-            foreach (Dictionary<string, object> equipment in roomEquipment)
-            {
-                if (equipment["OwnerId"] != DBNull.Value)
-                {
-                    Dictionary<string, object> owner = Program.db.GetRecordsByField("Students", "Id", equipment["OwnerId"])[0];
-                    WriteLine($"{equipment["Type"]}, property number: {equipment["PropertyNumber"]}, Condition: {equipment["Condition"]}, Owned by: {owner["FullName"]}");
-                }
-                else
-                {
-                    WriteLine($"{equipment["Type"]}, property number: {equipment["PropertyNumber"]}, Condition: {equipment["Condition"]}");
-                }
-            }
-        }
-        public static void equipmentAssignedToStudent(int StudentId)
-        {
-            List<Dictionary<string, object>> studentEquipment = Program.db.GetRecordsByField("Equipment", "OwnerId", StudentId);
-            foreach (Dictionary<string, object> equipment in studentEquipment)
-            {
-                WriteLine($"{equipment["Type"]}, property number: {equipment["PropertyNumber"]}, Condition: {equipment["Condition"]}");
-            }
-        }
-        public static void showEquipmentWithCondition(Condition condition)
-        {
-            List<Dictionary<string, object>> allEquipment = Program.db.GetRecordsByField("Equipment", "Condition", condition.ToString());
-            foreach (Dictionary<string, object> equipment in allEquipment)
-            {
-                WriteLine($"{equipment["Type"]}, property number: {equipment["PropertyNumber"]}, in Room: {equipment["RoomId"]}");
-            }
+            Dictionary<string, object> UpdatedStatus = new Dictionary<string, object> {
+                {"Status", status.ToString()}
+            };
+
         }
         public static void registerRepairRequest(string propertyNumber)
         {
@@ -3409,7 +3368,7 @@ namespace Dormitory
                             ENUserInterFace.dormitorymngmnt();
                             return;
                         }
-                    }  
+                    }
                 }
             }
             catch (Exception)
@@ -4091,7 +4050,7 @@ namespace Dormitory
             try
             {
                 AnsiConsole.MarkupLine("[bold blue]📋 Register New Block Supervisor[/]");
-                
+
 
                 string SocialNumber;
                 while (true)
@@ -4132,7 +4091,7 @@ namespace Dormitory
                             Thread.Sleep(500);
                             is_student = db.GetRecordsByField("Students", "SocialNumber", SocialNumber).Any();
                         });
-                    if(!is_student)
+                    if (!is_student)
                     {
                         AnsiConsole.MarkupLine("[red]⚠️ the entered social number must belong to a student ![/]");
                         Thread.Sleep(2000);
@@ -4185,12 +4144,12 @@ namespace Dormitory
                     break;
                 }
 
-                 
-                
+
+
 
                 string role = "Student";
 
-                
+
                 bool result = false;
                 AnsiConsole.Status()
                     .Spinner(Spinner.Known.Dots)
@@ -4294,7 +4253,7 @@ namespace Dormitory
                         }
                     }
 
-                    
+
                 }
             }
             catch (Exception)
@@ -4456,7 +4415,16 @@ namespace Dormitory
 
                 string cleanedType = type.Substring(type.IndexOf(' ') + 1);
 
-                Equipment NewEquipment = new Equipment(cleanedType, cond, blockid, dormid);
+                Dictionary<string, object> Block = Program.db.GetRecordsByField("Blocks", "Id", blockid)[0];
+                int itemcount = int.Parse(Block["ItemCount"].ToString());
+
+                Equipment NewEquipment = new Equipment(cleanedType, cond, blockid, dormid, itemcount);
+
+                Dictionary<string, object> UpdatedItemCount = new Dictionary<string, object> {
+            {"ItemCount", ++itemcount}
+        };
+
+                Program.db.UpdateRecord("Blocks", UpdatedItemCount, "Id", blockid);
 
                 AnsiConsole.Status()
                     .Start("📦 [green]Registering equipment...[/]", ctx =>
@@ -4754,8 +4722,8 @@ namespace Dormitory
         }
         public static void SetRepairStatusAsDone()
         {
-            try 
-            { 
+            try
+            {
                 AnsiConsole.MarkupLine("[bold blue]🔧 Changing Status of Repairing to Done[/]");
                 db.ShowAllrecords("Equipment", false);
                 string propertynumber = AnsiConsole.Ask<string>("Enter Property Number of Repaired Equipment: ");
@@ -4769,6 +4737,7 @@ namespace Dormitory
                     {
                         Thread.Sleep(1500);
                         EquipmentManager.changeRepairStatus(propertynumber, RequestStatus.Done);
+                        EquipmentManager.changeEquipmentCondition(propertynumber, Condition.Intact);
                         done = true;
                     });
 
@@ -4781,12 +4750,16 @@ namespace Dormitory
             {
                 AnsiConsole.MarkupLine($"[red]🚫 Changing Status Failed: {e.Message}[/]");
             }
+            catch (Exception ex)
+            {
+                WriteLine(ex.ToString());
+            }
             finally
             {
                 Thread.Sleep(3000);
                 ENUserInterFace.maintenancemngmnt();
-            }		
-	    }
+            }
+        }
         public static void CheckRepairStatus()
         {
             try
@@ -4795,7 +4768,7 @@ namespace Dormitory
                 db.ShowAllrecords("Equipment", false);
                 string propertynumber = AnsiConsole.Ask<string>("Enter Property Number of The Equipment Being Repaired: ");
                 if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.maintenancemngmnt();
-                
+
                 AnsiConsole.Status()
                     .Spinner(Spinner.Known.Dots)
                     .SpinnerStyle(Style.Parse("yellow"))
@@ -5157,7 +5130,7 @@ namespace Dormitory
                 int totalCapacity;
                 var blocks = db.GetRecordsByField("Blocks", "DormitoryId", dormitoryId);
                 long sum = 0;
-                foreach(var bl in blocks)
+                foreach (var bl in blocks)
                 {
                     sum += int.Parse(bl["TotalCapacity"].ToString());
                 }

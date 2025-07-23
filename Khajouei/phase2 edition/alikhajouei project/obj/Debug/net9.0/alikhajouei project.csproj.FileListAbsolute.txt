@@ -1,5 +1,0 @@
-C:\Users\alikh\source\repos\alikhajouei project\alikhajouei project\obj\Debug\net9.0\alikhajouei project.csproj.AssemblyReference.cache
-C:\Users\alikh\source\repos\alikhajouei project\alikhajouei project\obj\Debug\net9.0\alikhajouei project.GeneratedMSBuildEditorConfig.editorconfig
-C:\Users\alikh\source\repos\alikhajouei project\alikhajouei project\obj\Debug\net9.0\alikhajouei project.AssemblyInfoInputs.cache
-C:\Users\alikh\source\repos\alikhajouei project\alikhajouei project\obj\Debug\net9.0\alikhajouei project.AssemblyInfo.cs
-C:\Users\alikh\source\repos\alikhajouei project\alikhajouei project\obj\Debug\net9.0\alikhajouei project.csproj.CoreCompileInputs.cache
