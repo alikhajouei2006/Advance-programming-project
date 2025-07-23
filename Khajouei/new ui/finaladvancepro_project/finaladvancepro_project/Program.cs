@@ -1474,7 +1474,10 @@ namespace Dormitory
 		    Dictionary<string, object> UpdatedStatus = new Dictionary<string, object> {
 			    {"Status", status.ToString()}
 		    };
-
+            Program.db.UpdateRecord("Equipment", new Dictionary<string, object>
+            {
+                {"Status","Intact"}
+            },"PropertyNumber",propertyNumber);
 		    Program.db.UpdateRecord("RepairRequests", UpdatedStatus, "PropertyNumber", propertyNumber);
 	    }
         public static string checkCondition(string propertyNumber)
@@ -2840,7 +2843,7 @@ namespace Dormitory
             "1. 🛠️ Request Repair of Equipment",
             "2. 🔍 Check Status of Equipment Being Repaired",
             "3. ⚠️ Set Equipment Condition as Broken",
-            "4. ✔️Set Repair Status as Done",
+            "4. ✔️ Set Repair Status as Done",
             "5. 🔙 Back to Previous Menu"
         };
 
@@ -2863,7 +2866,7 @@ namespace Dormitory
                         Program.SetEquipmentConditionAsBroken();
                         break;
                     case var s when s.Contains("Status as Done"):
-                        Program.SetEquipmentConditionAsBroken();
+                        Program.SetRepairStatusAsDone();
                         break;
                     case var s when s.Contains("Back"):
                         equipmentmngmnt();
@@ -3051,7 +3054,7 @@ namespace Dormitory
 
                 switch (choice)
                 {
-                    case var s when s.Contains("repair requests"):
+                    case var s when s.Contains("Repair requests"):
                         Program.showAllRepairRequests();
                         break;
                     case var s when s.Contains("accommodation history"):
@@ -4789,9 +4792,10 @@ namespace Dormitory
             try
             {
                 AnsiConsole.MarkupLine("[bold blue]🔍 Checking Repair Request of an Equipment[/]");
+                db.ShowAllrecords("Equipment", false);
                 string propertynumber = AnsiConsole.Ask<string>("Enter Property Number of The Equipment Being Repaired: ");
                 if (ENUserInterFace.checkback(propertynumber)) ENUserInterFace.maintenancemngmnt();
-                db.ShowAllrecords("Equipment", false);
+                
                 AnsiConsole.Status()
                     .Spinner(Spinner.Known.Dots)
                     .SpinnerStyle(Style.Parse("yellow"))
@@ -5796,7 +5800,7 @@ namespace Dormitory
                     var students = Program.db.GetRecordsByField("Students", "RoomId", roomId);
                     int count = students.Count;
 
-                    string status = count >= capacity
+                    string status = count >= (6 - capacity)
                         ? "[green]✅ Full[/]"
                         : "[yellow]🟡 Empty[/]";
 
