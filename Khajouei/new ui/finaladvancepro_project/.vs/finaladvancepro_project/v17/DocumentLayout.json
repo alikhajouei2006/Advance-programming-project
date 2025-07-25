@@ -1,0 +1,41 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\alikh\\source\\repos\\finaladvancepro_project\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{0626F592-F006-4D56-B5A9-8C98A6736227}|finaladvancepro_project\\finaladvancepro_project.csproj|c:\\users\\alikh\\source\\repos\\finaladvancepro_project\\finaladvancepro_project\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{0626F592-F006-4D56-B5A9-8C98A6736227}|finaladvancepro_project\\finaladvancepro_project.csproj|solutionrelative:finaladvancepro_project\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 1,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{eefa5220-e298-11d0-8f78-00a0c9110057}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "Program.cs",
+              "DocumentMoniker": "C:\\Users\\alikh\\source\\repos\\finaladvancepro_project\\finaladvancepro_project\\Program.cs",
+              "RelativeDocumentMoniker": "finaladvancepro_project\\Program.cs",
+              "ToolTip": "C:\\Users\\alikh\\source\\repos\\finaladvancepro_project\\finaladvancepro_project\\Program.cs",
+              "RelativeToolTip": "finaladvancepro_project\\Program.cs",
+              "ViewState": "AgIAAEkXAAAAAAAAAAAiwGAXAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-07-19T13:19:51.932Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
